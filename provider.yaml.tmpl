@@ -2,7 +2,7 @@ name: proxmox
 version: __VERSION__
 home: https://github.com/iamveen/devpod-proxmox-provider
 description: |
-  DevPod machine provider that provisions KVM virtual machines on Proxmox VE
+  Devsy machine provider that provisions KVM virtual machines on Proxmox VE
   to host development workspaces.
 optionGroups:
   - name: "Connection"
@@ -67,8 +67,8 @@ options:
     description: "Proxmox OS type for the VM"
     default: "l26"
 agent:
-  path: ~/.devpod/agent
-  dataPath: ~/.devpod/data
+  path: ${DEVSY}
+  dataPath: ~/.devsy/data
   inactivityTimeout: ""
   injectGitCredentials: false
   injectDockerCredentials: false
@@ -102,4 +102,4 @@ exec:
   start: ${PROXMOX_PROVIDER} start
   stop: ${PROXMOX_PROVIDER} stop
   status: ${PROXMOX_PROVIDER} status
-  command: ${PROXMOX_PROVIDER} command
+  command: ${PROXMOX_PROVIDER} command "${COMMAND}"

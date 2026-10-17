@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/iamveen/devpod-proxmox-provider/pkg/options"
@@ -131,10 +132,9 @@ func runStop(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// command outputs the SSH command template for DevPod to execute on the VM.
 var commandCmd = &cobra.Command{
 	Use:   "command",
-	Short: "Output SSH command template for DevPod helper commands",
+	Short: "Run a Devsy agent command on the workspace VM over SSH",
 	RunE:  runCommand,
 }
 
@@ -143,8 +143,10 @@ func init() {
 }
 
 func runCommand(cmd *cobra.Command, args []string) error {
-	// The command template uses DevPod's SSH machinery — we just output
-	// what DevPod needs to run helper commands on the machine.
-	fmt.Fprintln(cmd.OutOrStdout(), `"${DEVPOD}" helper sh -c "${COMMAND}"`)
-	return nil
+	opts := options.FromEnv()
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+	client := proxmox.NewHTTPClient(opts.Host, opts.Port, opts.Token)
+	return runSSHCommand(cmd.Context(), opts, client, args, "ssh", cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), os.Exit)
 }
