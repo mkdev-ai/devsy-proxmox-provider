@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# uninstall.sh — Remove all Proxmox resources created by setup.sh.
-# Discovers devpod resources automatically — no flags required.
+# uninstall.sh — Remove Devsy Proxmox resources created by setup.sh.
+# Targets only Devsy-named resources; legacy DevPod resources are unsupported
+# and are intentionally left untouched. No flags are required.
 # Run as root (or with sudo) on the Proxmox host.
 #
 # Usage:
@@ -40,20 +41,24 @@ command -v qm    &>/dev/null || die "qm not found — run this script on a Proxm
 
 [[ $DRY_RUN -eq 1 ]] && echo "" && log "Mode: dry-run (no changes will be made)"
 
-DEVPOD_USER="devpod@pve"
-DEVPOD_TOKEN_NAME="devpod"
-DEVPOD_TOKEN_ID="${DEVPOD_USER}!${DEVPOD_TOKEN_NAME}"
+DEVSY_USER="devsy@pve"
+DEVSY_TOKEN_NAME="devsy"
+DEVSY_TOKEN_ID="${DEVSY_USER}!${DEVSY_TOKEN_NAME}"
 
 # ── phase 1: VMs ──────────────────────────────────────────────────────────────
 step "Phase 1: VMs"
 
-DEVPOD_VMIDS=$(qm list 2>/dev/null | awk 'NR>1 && $2 ~ /^devpod-/ {print $1}')
+DEVSY_VMIDS=$(qm list 2>/dev/null | awk 'NR>1 && $2 ~ /^devsy-/ {print $1}')
 
-if [[ -z "$DEVPOD_VMIDS" ]]; then
-    log "No devpod VMs found"
+if [[ -z "$DEVSY_VMIDS" ]]; then
+    log "No Devsy VMs found"
 else
     while IFS= read -r vmid; do
         name=$(qm config "$vmid" 2>/dev/null | awk -F': ' '/^name:/{print $2}')
+        if [[ "$name" != devsy-* ]]; then
+            log "Skipping VM ${vmid}: name '${name:-unknown}' is not Devsy-prefixed"
+            continue
+        fi
         status=$(qm status "$vmid" 2>/dev/null | awk '{print $2}')
         if [[ "$status" == "running" ]]; then
             run qm stop "$vmid"
@@ -61,28 +66,28 @@ else
         fi
         run qm destroy "$vmid" --purge
         [[ $DRY_RUN -eq 0 ]] && log "Destroyed VM ${vmid} (${name})"
-    done <<< "$DEVPOD_VMIDS"
+    done <<< "$DEVSY_VMIDS"
 fi
 
 # ── phase 2: cloud-init snippets ──────────────────────────────────────────────
 step "Phase 2: Cloud-init snippets"
 
-DEVPOD_SNIPPETS=$(find /var/lib/vz/snippets -name 'devpod-*-vendor.yaml' 2>/dev/null || true)
+DEVSY_SNIPPETS=$(find /var/lib/vz/snippets -name 'devsy-*-vendor.yaml' 2>/dev/null || true)
 
-if [[ -z "$DEVPOD_SNIPPETS" ]]; then
-    log "No devpod snippets found"
+if [[ -z "$DEVSY_SNIPPETS" ]]; then
+    log "No Devsy snippets found"
 else
     while IFS= read -r f; do
         run rm -f "$f"
         [[ $DRY_RUN -eq 0 ]] && log "Removed ${f}"
-    done <<< "$DEVPOD_SNIPPETS"
+    done <<< "$DEVSY_SNIPPETS"
 fi
 
 # ── phase 3: service account ──────────────────────────────────────────────────
 step "Phase 3: Service account"
 
-if ! pveum user list --output-format json 2>/dev/null | grep -q "\"userid\":\"${DEVPOD_USER}\""; then
-    log "User ${DEVPOD_USER} not found — skipping"
+if ! pveum user list --output-format json 2>/dev/null | grep -q "\"userid\":\"${DEVSY_USER}\""; then
+    log "User ${DEVSY_USER} not found — skipping"
 else
     # ACLs first — must be removed before the token, otherwise Proxmox warns
     # about ACL entries referencing a non-existent token when reading user config
@@ -97,19 +102,19 @@ else
             run pvesh set /access/acl --path "$path" --roles "$role" --tokens "$ugid" --delete 1
         fi
         [[ $DRY_RUN -eq 0 ]] && log "Removed ACL: ${role} on ${path} for ${ugid}"
-    done < <(pveum acl list 2>/dev/null | awk 'NR>1 && $3 ~ /^devpod@pve/')
+    done < <(pveum acl list 2>/dev/null | awk 'NR>1 && ($3 == "devsy@pve" || $3 == "devsy@pve!devsy")')
 
     # Token
-    if pveum user token list "${DEVPOD_USER}" --output-format json 2>/dev/null | grep -q "\"tokenid\":\"${DEVPOD_TOKEN_NAME}\""; then
-        run pveum user token remove "${DEVPOD_USER}" "${DEVPOD_TOKEN_NAME}"
-        [[ $DRY_RUN -eq 0 ]] && log "Removed token ${DEVPOD_TOKEN_ID}"
+    if pveum user token list "${DEVSY_USER}" --output-format json 2>/dev/null | grep -q "\"tokenid\":\"${DEVSY_TOKEN_NAME}\""; then
+        run pveum user token remove "${DEVSY_USER}" "${DEVSY_TOKEN_NAME}"
+        [[ $DRY_RUN -eq 0 ]] && log "Removed token ${DEVSY_TOKEN_ID}"
     else
-        log "Token ${DEVPOD_TOKEN_ID} not found — skipping"
+        log "Token ${DEVSY_TOKEN_ID} not found — skipping"
     fi
 
     # User
-    run pveum user del "${DEVPOD_USER}"
-    [[ $DRY_RUN -eq 0 ]] && log "Removed user ${DEVPOD_USER}"
+    run pveum user del "${DEVSY_USER}"
+    [[ $DRY_RUN -eq 0 ]] && log "Removed user ${DEVSY_USER}"
 fi
 
 echo ""

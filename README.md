@@ -1,74 +1,78 @@
-# DevPod Proxmox Provider
+# Devsy Proxmox Provider
 
-A [DevPod](https://devpod.sh) machine provider that provisions KVM virtual machines on [Proxmox VE](https://www.proxmox.com/en/proxmox-virtual-environment) to host development workspaces.
+A [Devsy](https://github.com/mkdev-ai/devsy-proxmox-provider) machine provider that provisions KVM virtual machines on [Proxmox VE](https://www.proxmox.com/en/proxmox-virtual-environment) to host development workspaces.
 
-Each machine gets a dedicated VM cloned from a cloud-init template. DevPod installs Docker on the VM and runs your devcontainer inside it — the VM is the machine, the workspace is a container on top of it.
+Each machine gets a dedicated VM cloned from a cloud-init template. Devsy installs Docker on the VM and runs your devcontainer inside it — the VM is the machine, the workspace is a container on top of it.
 
 ## Requirements
 
 - Proxmox VE 7.0 or later
-- [DevPod](https://devpod.sh/docs/getting-started/install) CLI installed
+- Devsy CLI installed
 - SSH root access to the Proxmox host (for one-time setup)
 - The target node reachable from your machine over HTTPS (port 8006)
+- An existing network bridge and storage pool for the template and workspace VMs
+- The existing `local` storage configured to support snippets for the cloud-init vendor file
 
 ## Quick Start
 
 ### 1. Prepare Proxmox
 
-Run the setup script once on your Proxmox host. SSH in as root and execute:
+Run the setup script once on the Proxmox host as root. The script creates or verifies only its Devsy account, API token, ACLs, and cloud-init template. It does not create or reconfigure the selected network bridge or storage pool; choose resources that already exist. The Proxmox `local` storage must already support snippets.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/iamveen/devpod-proxmox-provider/main/scripts/setup.sh \
-  | bash -s -- \
+curl -fsSL https://raw.githubusercontent.com/mkdev-ai/devsy-proxmox-provider/main/scripts/setup.sh \
+  | ssh root@proxmox-host 'bash -s --' \
       --node pve \
       --storage local-lvm \
       --bridge vmbr0
 ```
 
-The script prints the new API token at the end — save it.
+The default account is `devsy@pve`, its API token ID is `devsy`, and the template is `devsy-ubuntu-24-04`. The script prints a newly created API token secret once; store it securely because it cannot be retrieved later. Existing DevPod-created machines and credentials are unsupported by this provider and are left untouched.
 
 ### 2. Install the provider
 
 ```bash
-devpod provider add github.com/iamveen/devpod-proxmox-provider
-devpod provider use proxmox
+devsy provider add github.com/mkdev-ai/devsy-proxmox-provider
+devsy provider use proxmox
 ```
 
 ### 3. Configure it
 
 ```bash
-devpod provider set-options proxmox \
+devsy provider set-options proxmox \
   -o PROXMOX_HOST=your-proxmox-host \
-  -o PROXMOX_USER=devpod@pve \
-  -o PROXMOX_TOKEN=devpod@pve!devpod=<secret> \
+  -o PROXMOX_USER=devsy@pve \
+  -o PROXMOX_TOKEN='devsy@pve!devsy=<secret>' \
   -o PROXMOX_NODE=pve \
-  -o PROXMOX_TEMPLATE=devpod-ubuntu-24-04
+  -o PROXMOX_TEMPLATE=devsy-ubuntu-24-04
 ```
 
 ### 4. Start a workspace
 
 ```bash
-devpod up git@github.com:myorg/myrepo --provider proxmox
+devsy up git@github.com:myorg/myrepo --provider proxmox
 ```
 
 ## Setup Script
 
-`scripts/setup.sh` prepares a Proxmox node for use with this provider. Run it as root on the Proxmox host. It is idempotent — safe to re-run.
+`scripts/setup.sh` prepares a Proxmox node for use with this provider. Run it manually, once as root on the Proxmox host before configuring the provider in Devsy. Provider installation does not invoke this privileged script. It is idempotent — safe to re-run.
 
 ```bash
 # Run directly on the host
 sudo bash scripts/setup.sh [options]
 
 # Or pipe over SSH
-ssh user@proxmox-host 'sudo bash -s -- [options]' < scripts/setup.sh
+ssh root@proxmox-host 'bash -s -- [options]' < scripts/setup.sh
 ```
 
 ### What it does
 
-1. Creates a `devpod@pve` service account and `devpod@pve!devpod` API token
+1. Creates a `devsy@pve` service account and `devsy@pve!devsy` API token
 2. Grants the minimum required ACL roles (see [Permissions](#permissions))
 3. Downloads and verifies an Ubuntu cloud image
-4. Creates a cloud-init VM template with QEMU guest agent pre-installed
+4. Creates a cloud-init VM template with QEMU guest agent pre-installed (default: `devsy-ubuntu-24-04`)
+
+The `--bridge` and `--storage` values must name existing Proxmox resources. Setup uses them for the template and does not create or reconfigure them. The `local` storage must already support snippets; setup checks this prerequisite and does not change storage configuration.
 
 ### Options
 
@@ -80,27 +84,29 @@ ssh user@proxmox-host 'sudo bash -s -- [options]' < scripts/setup.sh
 | `--vmid` | `9000` | VMID for the template |
 | `--image` | `ubuntu:24.04` | Distro and version (`ubuntu:20.04`, `22.04`, `24.04`, `25.04`) |
 | `--disk-format` | `raw` | `raw` for LVM/Ceph; `qcow2` for directory-backed storage (local, NFS) |
-| `--template-name` | `devpod-<distro>-<version>` | Override the template name |
+| `--template-name` | `devsy-<distro>-<version>` | Override the template name |
 | `--dry-run` | | Print what would be done without making any changes |
 
 ### Uninstalling
 
-To remove all resources created by setup (VMs, template, service account, token):
+To remove Devsy-named resources managed by setup (VMs, template, service account, token):
 
 ```bash
-ssh user@proxmox-host 'sudo bash -s' < scripts/uninstall.sh
+ssh root@proxmox-host 'bash -s' < scripts/uninstall.sh
 ```
+
+Uninstall targets only `devsy-*` VMs/snippets and the `devsy@pve` account/token. Legacy DevPod-created VMs and credentials are unsupported, are not adopted, and are never removed by this script.
 
 ## Provider Options
 
-Set options with `devpod provider set-options proxmox -o KEY=VALUE`.
+Set options with `devsy provider set-options proxmox -o KEY=VALUE`.
 
 ### Required
 
 | Option | Description |
 |---|---|
 | `PROXMOX_HOST` | Proxmox VE hostname or IP address |
-| `PROXMOX_USER` | Proxmox user (e.g. `devpod@pve`) |
+| `PROXMOX_USER` | Proxmox user (e.g. `devsy@pve`) |
 | `PROXMOX_TOKEN` | API token in the format `USER@REALM!TOKENID=SECRET` |
 | `PROXMOX_NODE` | Proxmox node name to create VMs on |
 | `PROXMOX_TEMPLATE` | Name of the cloud-init VM template created by `setup.sh` |
@@ -110,8 +116,8 @@ Set options with `devpod provider set-options proxmox -o KEY=VALUE`.
 | Option | Default | Description |
 |---|---|---|
 | `PROXMOX_PORT` | `8006` | Proxmox API port |
-| `PROXMOX_STORAGE` | `local-lvm` | Storage pool for VM disks |
-| `PROXMOX_NETWORK` | `vmbr0` | Network bridge to attach VMs to |
+| `PROXMOX_STORAGE` | `local-lvm` | Existing storage pool for VM disks; not created or reconfigured by the provider |
+| `PROXMOX_NETWORK` | `vmbr0` | Existing network bridge to attach VMs to; not created or reconfigured by the provider |
 | `PROXMOX_VM_START_ID` | `2000` | Starting VMID for workspace VMs (increments until a free ID is found) |
 | `VM_MEMORY` | `4096` | VM memory in MB |
 | `VM_CORES` | `2` | Number of vCPU cores |
@@ -121,33 +127,33 @@ Set options with `devpod provider set-options proxmox -o KEY=VALUE`.
 
 ```bash
 # Create and start a workspace
-devpod up git@github.com:myorg/myrepo --provider proxmox
+devsy up git@github.com:myorg/myrepo --provider proxmox
 
 # Stop a workspace (VM is shut down, data persists)
-devpod stop my-workspace
+devsy stop my-workspace
 
 # Resume a stopped workspace
-devpod up my-workspace
+devsy up my-workspace
 
 # Delete a workspace and its VM
-devpod delete my-workspace
+devsy delete my-workspace
 ```
 
-Workspace VMs are named `devpod-{machine-id}` and tagged `devpod` in Proxmox.
+New workspace VMs are named `devsy-{machine-id}` and tagged `devsy` in Proxmox. This provider does not discover, adopt, resume, rename, or delete legacy DevPod-named VMs.
 
 ## How It Works
 
-1. `devpod up` calls the provider's `create` command
+1. `devsy up` calls the provider's `create` command
 2. The provider clones the cloud-init template to a new VM
-3. Cloud-init is applied: SSH key, DHCP network, `devpod` user
+3. Cloud-init is applied: SSH key, DHCP network, `devsy` user
 4. If `VM_DISK_SIZE` exceeds the template disk, the disk is resized
 5. The VM is started; the provider polls until the QEMU guest agent reports an IP
-6. DevPod connects via SSH, installs its agent, and launches the devcontainer
+6. Devsy connects via SSH, installs its agent, and launches the devcontainer
 7. Your IDE connects to the workspace over SSH
 
 ## Permissions
 
-`setup.sh` creates a `devpod@pve` user and grants these roles:
+`setup.sh` creates a `devsy@pve` user and grants these roles:
 
 | Path | Role | Key privileges |
 |---|---|---|
@@ -163,8 +169,8 @@ Both the user and token receive identical grants — required because Proxmox pr
 Requires Go 1.22+.
 
 ```bash
-git clone https://github.com/iamveen/devpod-proxmox-provider
-cd devpod-proxmox-provider
+git clone https://github.com/mkdev-ai/devsy-proxmox-provider
+cd devsy-proxmox-provider
 go build -o dist/proxmox-provider .
 ```
 

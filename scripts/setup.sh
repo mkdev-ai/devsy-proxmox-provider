@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# setup.sh — Configure Proxmox for the DevPod provider.
+# setup.sh — Configure Proxmox for the Devsy provider.
+# Legacy DevPod resources are unsupported and are intentionally left untouched.
 # Run as root on the Proxmox host.
 #
 # Usage:
@@ -14,14 +15,14 @@
 #   --disk-format   raw | qcow2               (default: raw)
 #                   raw  — required for LVM/Ceph storage
 #                   qcow2 — use for directory-backed storage (local, NFS)
-#   --template-name Override template name    (default: devpod-<distro>-<version>)
+#   --template-name Override template name    (default: devsy-<distro>-<version>)
 #   --dry-run       Print what would be done without making any changes
 #
 # Example (run directly on the host):
 #   sudo bash setup.sh --node pve --storage local-lvm --bridge vmbr0 --image ubuntu:24.04
 #
 # Example (pipe over SSH):
-#   ssh user@proxmox-host 'sudo bash -s -- --node pve --storage local-lvm' < setup.sh
+#   ssh root@proxmox-host 'bash -s -- --node pve --storage local-lvm' < setup.sh
 set -euo pipefail
 
 # ── defaults ──────────────────────────────────────────────────────────────────
@@ -34,9 +35,9 @@ DISK_FORMAT="raw"
 TEMPLATE_NAME=""
 DRY_RUN=0
 
-DEVPOD_USER="devpod@pve"
-DEVPOD_TOKEN_NAME="devpod"
-DEVPOD_TOKEN_ID="${DEVPOD_USER}!${DEVPOD_TOKEN_NAME}"
+DEVSY_USER="devsy@pve"
+DEVSY_TOKEN_NAME="devsy"
+DEVSY_TOKEN_ID="${DEVSY_USER}!${DEVSY_TOKEN_NAME}"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 die()  { echo "ERROR: $*" >&2; exit 1; }
@@ -92,7 +93,7 @@ ubuntu_codename() {
 CODENAME=$(ubuntu_codename "$VERSION")
 VERSION_SLUG="${VERSION//./-}"
 
-[[ -z "$TEMPLATE_NAME" ]] && TEMPLATE_NAME="devpod-${DISTRO}-${VERSION_SLUG}"
+[[ -z "$TEMPLATE_NAME" ]] && TEMPLATE_NAME="devsy-${DISTRO}-${VERSION_SLUG}"
 
 IMG_URL="https://cloud-images.ubuntu.com/${CODENAME}/current/${CODENAME}-server-cloudimg-amd64.img"
 IMG_PATH="/tmp/${CODENAME}-server-cloudimg-amd64.img"
@@ -116,53 +117,67 @@ log "Disk format:   ${DISK_FORMAT}"
 log "Template name: ${TEMPLATE_NAME}"
 [[ $DRY_RUN -eq 1 ]] && log "Mode:          dry-run (no changes will be made)"
 
+# Refuse to touch a VMID owned by a different VM before changing any resources.
+VM_PRESENT=0
+VM_CONFIG=""
+if [[ $DRY_RUN -eq 0 ]] && qm list 2>/dev/null | awk -v vmid="${VMID}" 'NR > 1 && $1 == vmid { found = 1 } END { exit !found }'; then
+    if ! VM_CONFIG=$(qm config "${VMID}" 2>/dev/null); then
+        die "Could not inspect VMID ${VMID}; no resources were changed."
+    fi
+    VM_NAME=$(awk '/^name: / { sub(/^name: /, ""); print; exit }' <<< "$VM_CONFIG")
+    if [[ "$VM_NAME" != "$TEMPLATE_NAME" ]]; then
+        die "VMID ${VMID} belongs to '${VM_NAME:-an unnamed VM}', not configured Devsy template '${TEMPLATE_NAME}'. It was not modified; choose another --vmid."
+    fi
+    VM_PRESENT=1
+fi
+
 # ── phase 1: service account ──────────────────────────────────────────────────
-step "Phase 1: Service account (${DEVPOD_USER})"
+step "Phase 1: Service account (${DEVSY_USER})"
 
 # User
-if pveum user list --output-format json 2>/dev/null | grep -q "\"userid\":\"${DEVPOD_USER}\""; then
-    log "User ${DEVPOD_USER} already exists"
+if pveum user list --output-format json 2>/dev/null | grep -q "\"userid\":\"${DEVSY_USER}\""; then
+    log "User ${DEVSY_USER} already exists"
 else
-    run pveum user add "${DEVPOD_USER}" --comment "DevPod service account"
-    [[ $DRY_RUN -eq 0 ]] && log "Created user ${DEVPOD_USER}"
+    run pveum user add "${DEVSY_USER}" --comment "Devsy service account"
+    [[ $DRY_RUN -eq 0 ]] && log "Created user ${DEVSY_USER}"
 fi
 
 # Token
 TOKEN_VALUE=""
-if pveum user token list "${DEVPOD_USER}" --output-format json 2>/dev/null | grep -q "\"tokenid\":\"${DEVPOD_TOKEN_NAME}\""; then
-    log "Token ${DEVPOD_TOKEN_ID} already exists"
+if pveum user token list "${DEVSY_USER}" --output-format json 2>/dev/null | grep -q "\"tokenid\":\"${DEVSY_TOKEN_NAME}\""; then
+    log "Token ${DEVSY_TOKEN_ID} already exists"
 else
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "[dry-run] pvesh create /access/users/${DEVPOD_USER}/token/${DEVPOD_TOKEN_NAME} --expire 0 --privsep 1"
+        log "[dry-run] pvesh create /access/users/${DEVSY_USER}/token/${DEVSY_TOKEN_NAME} --expire 0 --privsep 1"
     else
-        TOKEN_VALUE=$(pvesh create "/access/users/${DEVPOD_USER}/token/${DEVPOD_TOKEN_NAME}" \
+        TOKEN_VALUE=$(pvesh create "/access/users/${DEVSY_USER}/token/${DEVSY_TOKEN_NAME}" \
             --expire 0 --privsep 1 --output-format json \
             | grep -o '"value":"[^"]*"' | cut -d'"' -f4)
-        log "Created token ${DEVPOD_TOKEN_ID}"
+        log "Created token ${DEVSY_TOKEN_ID}"
     fi
 fi
 
 # ACLs — pvesh set /access/acl is idempotent (PUT)
 # /vms — VM operations (VM.Audit, VM.Clone, VM.Config.*, VM.PowerMgmt, etc.)
-run pvesh set /access/acl --path "/vms"                --roles "PVEVMAdmin"            --users  "${DEVPOD_USER}"
-run pvesh set /access/acl --path "/vms"                --roles "PVEVMAdmin"            --tokens "${DEVPOD_TOKEN_ID}"
+run pvesh set /access/acl --path "/vms"                --roles "PVEVMAdmin"            --users  "${DEVSY_USER}"
+run pvesh set /access/acl --path "/vms"                --roles "PVEVMAdmin"            --tokens "${DEVSY_TOKEN_ID}"
 # /nodes/${NODE} — node-level audit (Sys.Audit for network/storage listing)
-run pvesh set /access/acl --path "/nodes/${NODE}"      --roles "PVEAuditor"            --users  "${DEVPOD_USER}"
-run pvesh set /access/acl --path "/nodes/${NODE}"      --roles "PVEAuditor"            --tokens "${DEVPOD_TOKEN_ID}"
+run pvesh set /access/acl --path "/nodes/${NODE}"      --roles "PVEAuditor"            --users  "${DEVSY_USER}"
+run pvesh set /access/acl --path "/nodes/${NODE}"      --roles "PVEAuditor"            --tokens "${DEVSY_TOKEN_ID}"
 # /storage/${STORAGE} — disk allocation for clones and cloud-init drives
-run pvesh set /access/acl --path "/storage/${STORAGE}" --roles "PVEDatastoreUser"      --users  "${DEVPOD_USER}"
-run pvesh set /access/acl --path "/storage/${STORAGE}" --roles "PVEDatastoreUser"      --tokens "${DEVPOD_TOKEN_ID}"
+run pvesh set /access/acl --path "/storage/${STORAGE}" --roles "PVEDatastoreUser"      --users  "${DEVSY_USER}"
+run pvesh set /access/acl --path "/storage/${STORAGE}" --roles "PVEDatastoreUser"      --tokens "${DEVSY_TOKEN_ID}"
 # /sdn/zones — SDN.Use required when cloning a VM onto a bridge managed by Proxmox SDN
-run pvesh set /access/acl --path "/sdn/zones"          --roles "PVESDNUser"            --users  "${DEVPOD_USER}"
-run pvesh set /access/acl --path "/sdn/zones"          --roles "PVESDNUser"            --tokens "${DEVPOD_TOKEN_ID}"
+run pvesh set /access/acl --path "/sdn/zones"          --roles "PVESDNUser"            --users  "${DEVSY_USER}"
+run pvesh set /access/acl --path "/sdn/zones"          --roles "PVESDNUser"            --tokens "${DEVSY_TOKEN_ID}"
 [[ $DRY_RUN -eq 0 ]] && log "ACL grants applied on /vms, /nodes/${NODE}, /storage/${STORAGE}, and /sdn/zones"
 
 if [[ -n "$TOKEN_VALUE" ]]; then
     echo ""
     echo "  ┌─────────────────────────────────────────────────────────────────┐"
-    echo "  │  New API token — add to your environment before using DevPod:  │"
+    echo "  │  New API token — save securely for your Devsy provider config:  │"
     echo "  │                                                                 │"
-    echo "  │    export PROXMOX_TOKEN=${DEVPOD_TOKEN_ID}=${TOKEN_VALUE}"
+    echo "  │    export PROXMOX_TOKEN=${DEVSY_TOKEN_ID}=${TOKEN_VALUE}"
     echo "  │                                                                 │"
     echo "  └─────────────────────────────────────────────────────────────────┘"
     echo ""
@@ -171,9 +186,9 @@ fi
 # ── phase 2: template ─────────────────────────────────────────────────────────
 step "Phase 2: Template (${TEMPLATE_NAME}, VMID ${VMID})"
 
-# Idempotency: fully-created template → done; partial VM → destroy and retry
-if [[ $DRY_RUN -eq 0 ]] && qm list 2>/dev/null | grep -q "^[[:space:]]*${VMID}[[:space:]]"; then
-    if qm config "${VMID}" 2>/dev/null | grep -q "^template:"; then
+# Idempotency: matching template → done; matching partial VM → destroy and retry.
+if [[ $VM_PRESENT -eq 1 ]]; then
+    if grep -q "^template:" <<< "$VM_CONFIG"; then
         log "Template VMID ${VMID} already exists — nothing to do"
         echo ""
         echo "✓ Setup complete"
@@ -196,19 +211,20 @@ cleanup_on_error() {
 }
 trap cleanup_on_error EXIT
 
-# Enable snippets on local storage for the vendor cloud-init config
-run mkdir -p /var/lib/vz/snippets
+# The snippet storage must already be configured; dry-run must not create files.
+if [[ $DRY_RUN -eq 1 ]]; then
+    log "[dry-run] Would ensure /var/lib/vz/snippets exists"
+else
+    mkdir -p /var/lib/vz/snippets
+fi
 LOCAL_CONTENT=$(pvesh get /storage/local --output-format json 2>/dev/null \
     | grep -o '"content":"[^"]*"' | cut -d'"' -f4 || echo "")
 if [[ -z "$LOCAL_CONTENT" ]]; then
-    log "Warning: could not read local storage content types"
-    log "If cloud-init setup fails, manually enable snippets in:"
-    log "  Datacenter → Storage → local → Edit → Content → add Snippets"
+    die "Could not read existing local storage content. Ensure local storage exists and supports snippets; setup does not configure storage."
 elif echo "$LOCAL_CONTENT" | grep -q snippets; then
     log "Snippets already enabled on local storage"
 else
-    run pvesm set local --content "${LOCAL_CONTENT},snippets"
-    [[ $DRY_RUN -eq 0 ]] && log "Enabled snippets on local storage"
+    die "Snippets are not enabled on existing local storage. Enable them in Proxmox first; setup does not reconfigure storage."
 fi
 
 # Write vendor cloud-init config (installs qemu-guest-agent on first boot)
@@ -293,7 +309,7 @@ else
     echo ""
     echo "  Template '${TEMPLATE_NAME}' (VMID ${VMID}) is ready."
     echo ""
-    echo "  Set in your DevPod provider config:"
+    echo "  Set in your Devsy provider config:"
     echo "    PROXMOX_TEMPLATE=${TEMPLATE_NAME}"
 fi
 echo ""
