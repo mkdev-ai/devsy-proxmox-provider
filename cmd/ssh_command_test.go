@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamveen/devpod-proxmox-provider/pkg/options"
-	"github.com/iamveen/devpod-proxmox-provider/pkg/proxmox"
+	"github.com/mkdev-ai/devsy-proxmox-provider/pkg/options"
+	"github.com/mkdev-ai/devsy-proxmox-provider/pkg/proxmox"
 )
 
 func TestRunSSHCommand_RelaysStreamsAndExitStatus(t *testing.T) {

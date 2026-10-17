@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iamveen/devpod-proxmox-provider/pkg/options"
-	"github.com/iamveen/devpod-proxmox-provider/pkg/proxmox"
+	"github.com/mkdev-ai/devsy-proxmox-provider/pkg/options"
+	"github.com/mkdev-ai/devsy-proxmox-provider/pkg/proxmox"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 )

@@ -26,7 +26,7 @@ jobs:
             OS="${platform%/*}"
             ARCH="${platform#*/}"
             OUTPUT="dist/proxmox-provider-${OS}-${ARCH}"
-            GOOS=$OS GOARCH=$ARCH CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/iamveen/devpod-proxmox-provider/cmd.versionStr=${GITHUB_REF_NAME}" -o "$OUTPUT" .
+            GOOS=$OS GOARCH=$ARCH CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=${GITHUB_REF_NAME}" -o "$OUTPUT" .
             sha256sum "$OUTPUT" | awk '{print $1}' > "${OUTPUT}.sha256"
           done
 

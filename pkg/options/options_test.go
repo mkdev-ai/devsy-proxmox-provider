@@ -3,7 +3,7 @@ package options_test
 import (
 	"testing"
 
-	"github.com/iamveen/devpod-proxmox-provider/pkg/options"
+	"github.com/mkdev-ai/devsy-proxmox-provider/pkg/options"
 )
 
 func TestDefaultOptions(t *testing.T) {

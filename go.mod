@@ -1,4 +1,4 @@
-module github.com/iamveen/devpod-proxmox-provider
+module github.com/mkdev-ai/devsy-proxmox-provider
 
 go 1.26.2
 

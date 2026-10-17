@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iamveen/devpod-proxmox-provider/pkg/proxmox"
+	"github.com/mkdev-ai/devsy-proxmox-provider/pkg/proxmox"
 )
 
 func newTestServer(handler http.HandlerFunc) (*httptest.Server, *proxmox.HTTPClient) {
