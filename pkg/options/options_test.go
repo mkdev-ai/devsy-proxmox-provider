@@ -37,10 +37,10 @@ func TestDefaultOptions(t *testing.T) {
 func TestFromEnv(t *testing.T) {
 	t.Setenv("PROXMOX_HOST", "pve.example.com")
 	t.Setenv("PROXMOX_PORT", "8007")
-	t.Setenv("PROXMOX_USER", "root@pam")
-	t.Setenv("PROXMOX_TOKEN", "root@pam!test=secret")
+	t.Setenv("PROXMOX_USER", "devsy@pve")
+	t.Setenv("PROXMOX_TOKEN", "devsy@pve!provider=secret")
 	t.Setenv("PROXMOX_NODE", "pve1")
-	t.Setenv("PROXMOX_TEMPLATE", "devpod-template")
+	t.Setenv("PROXMOX_TEMPLATE", "devsy-template")
 	t.Setenv("PROXMOX_STORAGE", "fast-ssd")
 	t.Setenv("PROXMOX_NETWORK", "vmbr1")
 	t.Setenv("PROXMOX_VM_START_ID", "3000")
@@ -59,17 +59,17 @@ func TestFromEnv(t *testing.T) {
 	if opts.Port != 8007 {
 		t.Errorf("expected port 8007, got %d", opts.Port)
 	}
-	if opts.User != "root@pam" {
-		t.Errorf("expected user 'root@pam', got '%s'", opts.User)
+	if opts.User != "devsy@pve" {
+		t.Errorf("expected user 'devsy@pve', got '%s'", opts.User)
 	}
-	if opts.Token != "root@pam!test=secret" {
-		t.Errorf("expected token 'root@pam!test=secret', got '%s'", opts.Token)
+	if opts.Token != "devsy@pve!provider=secret" {
+		t.Errorf("expected token 'devsy@pve!provider=secret', got '%s'", opts.Token)
 	}
 	if opts.Node != "pve1" {
 		t.Errorf("expected node 'pve1', got '%s'", opts.Node)
 	}
-	if opts.Template != "devpod-template" {
-		t.Errorf("expected template 'devpod-template', got '%s'", opts.Template)
+	if opts.Template != "devsy-template" {
+		t.Errorf("expected template 'devsy-template', got '%s'", opts.Template)
 	}
 	if opts.Storage != "fast-ssd" {
 		t.Errorf("expected storage 'fast-ssd', got '%s'", opts.Storage)
@@ -100,16 +100,16 @@ func TestFromEnv(t *testing.T) {
 	}
 }
 
-func TestFromEnv_DevPodInjected(t *testing.T) {
+func TestFromEnv_DevsyInjected(t *testing.T) {
 	t.Setenv("MACHINE_ID", "abc-123")
-	t.Setenv("MACHINE_FOLDER", "/devpod/machines/abc-123")
+	t.Setenv("MACHINE_FOLDER", "/devsy/machines/abc-123")
 
 	opts := options.FromEnv()
 	if opts.MachineID != "abc-123" {
 		t.Errorf("expected machine ID 'abc-123', got '%s'", opts.MachineID)
 	}
-	if opts.MachineFolder != "/devpod/machines/abc-123" {
-		t.Errorf("expected machine folder '/devpod/machines/abc-123', got '%s'", opts.MachineFolder)
+	if opts.MachineFolder != "/devsy/machines/abc-123" {
+		t.Errorf("expected machine folder '/devsy/machines/abc-123', got '%s'", opts.MachineFolder)
 	}
 }
 
@@ -149,8 +149,8 @@ func TestValidate_MissingRequired(t *testing.T) {
 func TestValidate_AllSet(t *testing.T) {
 	opts := options.DefaultOptions()
 	opts.Host = "pve.local"
-	opts.User = "root@pam"
-	opts.Token = "root@pam!t=secret"
+	opts.User = "devsy@pve"
+	opts.Token = "devsy@pve!provider=secret"
 	opts.Node = "pve1"
 	opts.Template = "template"
 	err := opts.Validate()

@@ -9,26 +9,26 @@ import (
 // Options holds all configuration for the Proxmox provider.
 type Options struct {
 	// Proxmox connection
-	Host string
-	Port int
-	User string
+	Host  string
+	Port  int
+	User  string
 	Token string
-	Node string
+	Node  string
 
 	// Proxmox resources
-	Template string
-	Storage string
-	Network string
+	Template  string
+	Storage   string
+	Network   string
 	VMStartID int
 
 	// VM specs
-	Memory int
-	Cores int
+	Memory   int
+	Cores    int
 	DiskSize int
-	OSType string
+	OSType   string
 
-	// DevPod-injected
-	MachineID string
+	// Devsy-injected
+	MachineID     string
 	MachineFolder string
 }
 
@@ -100,7 +100,7 @@ func FromEnv() Options {
 		opts.OSType = v
 	}
 
-	// DevPod-injected
+	// Devsy-injected
 	opts.MachineID = os.Getenv("MACHINE_ID")
 	opts.MachineFolder = os.Getenv("MACHINE_FOLDER")
 

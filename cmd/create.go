@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/pem"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/url"
 	"os"
@@ -37,8 +37,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	if opts.MachineID == "" {
 		return fmt.Errorf("MACHINE_ID not set")
 	}
+	if opts.MachineFolder == "" {
+		return fmt.Errorf("MACHINE_FOLDER not set")
+	}
 
-	client := proxmox.NewHTTPClient(opts.Host, opts.Port, opts.Token)
+	client := newProxmoxClient(opts)
 
 	// Step 1: Ensure SSH keypair exists in the machine folder, generating it if needed
 	privKeyPath := fmt.Sprintf("%s/id_ed25519", opts.MachineFolder)
@@ -60,7 +63,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	// Step 3: Find a free VMID and clone
 	vmid := opts.VMStartID
-	vmName := "devpod-" + opts.MachineID
+	vmName := "devsy-" + opts.MachineID
 
 	for {
 		selectedVMID := vmid
@@ -108,7 +111,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Step 7: Output JSON with connection info
 	result := map[string]string{
 		"ipAddress": ip,
-		"sshUser":   "devpod",
+		"sshUser":   "devsy",
 	}
 	out, err := json.Marshal(result)
 	if err != nil {
@@ -136,10 +139,10 @@ func tryClone(ctx context.Context, client proxmox.Client, opts options.Options, 
 	// Configure cloud-init; clean up the clone if configuration fails
 	if err := client.ConfigureVM(ctx, opts.Node, vmid, proxmox.VMConfig{
 		Name:      vmName,
-		CIUser:    "devpod",
+		CIUser:    "devsy",
 		SSHKeys:   sshKeys,
 		IPConfig0: "ip=dhcp",
-		Tags:      "devpod",
+		Tags:      "devsy",
 		Cores:     opts.Cores,
 		Memory:    opts.Memory,
 	}); err != nil {

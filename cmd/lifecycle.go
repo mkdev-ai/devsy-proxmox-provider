@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/iamveen/devpod-proxmox-provider/pkg/options"
-	"github.com/iamveen/devpod-proxmox-provider/pkg/proxmox"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +25,9 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := proxmox.NewHTTPClient(opts.Host, opts.Port, opts.Token)
+	client := newProxmoxClient(opts)
 
-	vmid, err := findVMByMachineID(ctx, opts)
+	vmid, err := findVMByMachineIDWithClient(ctx, client, opts)
 	if err != nil {
 		// VM not found — already deleted
 		return nil
@@ -81,9 +80,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := proxmox.NewHTTPClient(opts.Host, opts.Port, opts.Token)
+	client := newProxmoxClient(opts)
 
-	vmid, err := findVMByMachineID(ctx, opts)
+	vmid, err := findVMByMachineIDWithClient(ctx, client, opts)
 	if err != nil {
 		return fmt.Errorf("VM not found: %w", err)
 	}
@@ -115,9 +114,9 @@ func runStop(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := proxmox.NewHTTPClient(opts.Host, opts.Port, opts.Token)
+	client := newProxmoxClient(opts)
 
-	vmid, err := findVMByMachineID(ctx, opts)
+	vmid, err := findVMByMachineIDWithClient(ctx, client, opts)
 	if err != nil {
 		return fmt.Errorf("VM not found: %w", err)
 	}

@@ -83,8 +83,8 @@ func TestCloneVM(t *testing.T) {
 		if params.Get("newid") != "101" {
 			t.Errorf("expected newid 101, got %s", params.Get("newid"))
 		}
-		if params.Get("name") != "devpod-test" {
-			t.Errorf("expected name 'devpod-test', got %s", params.Get("name"))
+		if params.Get("name") != "devsy-test" {
+			t.Errorf("expected name 'devsy-test', got %s", params.Get("name"))
 		}
 		if params.Get("full") != "1" {
 			t.Errorf("expected full=1, got %s", params.Get("full"))
@@ -97,7 +97,7 @@ func TestCloneVM(t *testing.T) {
 
 	upid, err := client.CloneVM(t.Context(), "pve1", 9000, proxmox.CloneRequest{
 		NewID:   101,
-		Name:    "devpod-test",
+		Name:    "devsy-test",
 		Node:    "pve1",
 		Full:    1,
 		Storage: "local-lvm",
@@ -118,14 +118,14 @@ func TestConfigureVM(t *testing.T) {
 		}
 		body, _ := io.ReadAll(r.Body)
 		params, _ := url.ParseQuery(string(body))
-		if params.Get("ciuser") != "devpod" {
-			t.Errorf("expected ciuser 'devpod', got '%s'", params.Get("ciuser"))
+		if params.Get("ciuser") != "devsy" {
+			t.Errorf("expected ciuser 'devsy', got '%s'", params.Get("ciuser"))
 		}
 		if params.Get("ipconfig0") != "ip=dhcp" {
 			t.Errorf("expected ipconfig0 'ip=dhcp', got '%s'", params.Get("ipconfig0"))
 		}
-		if params.Get("tags") != "devpod" {
-			t.Errorf("expected tags 'devpod', got '%s'", params.Get("tags"))
+		if params.Get("tags") != "devsy" {
+			t.Errorf("expected tags 'devsy', got '%s'", params.Get("tags"))
 		}
 		if params.Get("cores") != "2" {
 			t.Errorf("expected cores '2', got '%s'", params.Get("cores"))
@@ -138,9 +138,9 @@ func TestConfigureVM(t *testing.T) {
 	defer server.Close()
 
 	err := client.ConfigureVM(t.Context(), "pve1", 101, proxmox.VMConfig{
-		CIUser:    "devpod",
+		CIUser:    "devsy",
 		IPConfig0: "ip=dhcp",
-		Tags:      "devpod",
+		Tags:      "devsy",
 		Cores:     2,
 		Memory:    4096,
 	})
@@ -309,15 +309,15 @@ func TestGetNetworkInterfaces(t *testing.T) {
 			"data": map[string]interface{}{
 				"result": []map[string]interface{}{
 					{
-						"name":              "lo",
-						"hardware-address":  "",
+						"name":             "lo",
+						"hardware-address": "",
 						"ip-addresses": []map[string]interface{}{
 							{"ip-address": "127.0.0.1", "ip-address-type": "ipv4", "prefix": 8},
 						},
 					},
 					{
-						"name":              "eth0",
-						"hardware-address":  "00:11:22:33:44:55",
+						"name":             "eth0",
+						"hardware-address": "00:11:22:33:44:55",
 						"ip-addresses": []map[string]interface{}{
 							{"ip-address": "192.168.1.100", "ip-address-type": "ipv4", "prefix": 24},
 						},
