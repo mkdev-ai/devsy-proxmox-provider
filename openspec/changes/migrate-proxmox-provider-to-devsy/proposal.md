@@ -7,9 +7,9 @@ The provider currently provisions Proxmox VMs but still implements DevPod's prov
 ## What Changes
 
 - **BREAKING** Migrate the provider manifest, commands, configuration syntax, and user-facing product references to the current Devsy machine-provider and agent-injection contract; DevPod CLI compatibility is not a goal.
-- Create new Proxmox accounts, tokens, templates, tags, and workspace VMs with Devsy-branded names, while continuing to discover and manage existing resources created with legacy DevPod names without renaming or deleting them automatically.
+- Create new Proxmox accounts, tokens, templates, tags, and workspace VMs with Devsy-branded names. Do not discover, adopt, resume, rename, or delete resources created with legacy DevPod names; they remain untouched and outside this provider's supported scope.
 - Make provider initialization validate its configured options, Proxmox API access, and template through Devsy's supported initialization flow after options are supplied.
-- Update all user-facing installation, configuration, setup/uninstall, and troubleshooting documentation and messages to use Devsy commands and terminology. Preserve the separate root-run Proxmox setup script that creates the service account, API token/ACLs, and cloud-init template; Devsy provider installation must not run privileged setup implicitly. The configured network bridge and storage pool remain pre-existing prerequisites.
+- Update all user-facing installation, configuration, setup/uninstall, and troubleshooting documentation and messages to use Devsy commands and terminology. Clearly state that pre-migration DevPod-named resources are not adopted by the Devsy provider. Preserve the separate root-run Proxmox setup script that creates the service account, API token/ACLs, and cloud-init template; Devsy provider installation must not run privileged setup implicitly. The configured network bridge and storage pool remain pre-existing prerequisites.
 - Align the Go module path and self-referencing provider/docs URLs with the existing canonical repository in a separate change; leave the upstream fork repository untouched and do not rename the current GitHub repository.
 - Add automated contract coverage and an end-to-end acceptance check that creates a workspace, establishes agent/SSH connectivity, resumes it, and tears it down using Devsy.
 

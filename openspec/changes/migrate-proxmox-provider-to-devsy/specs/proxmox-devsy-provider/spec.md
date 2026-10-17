@@ -16,15 +16,15 @@ The provider SHALL use Devsy's supported machine-provider and agent configuratio
 
 ### Requirement: Devsy user-facing documentation and syntax
 
-Provider metadata, setup output, and user-facing documentation SHALL use Devsy product terminology and CLI syntax; references to DevPod-era names SHALL appear only where needed to explain compatibility with existing Proxmox resources.
+Provider metadata, setup output, and user-facing documentation SHALL use Devsy product terminology and CLI syntax; any mention of DevPod-era resources SHALL state that they are unsupported and are not adopted by the Devsy provider.
 
 #### Scenario: Install and configure from provider documentation
 - **WHEN** a user follows the provider's documented installation and workspace workflow
 - **THEN** all CLI commands use Devsy syntax and all setup instructions describe the Devsy provider flow
 
-#### Scenario: Explain legacy Proxmox resources
+#### Scenario: Explain unsupported legacy Proxmox resources
 - **WHEN** documentation mentions an existing resource created by an older provider version
-- **THEN** the DevPod-era identifier is explicitly labeled as a legacy resource name and is not presented as the name for newly created resources
+- **THEN** the DevPod-era identifier is explicitly labeled unsupported and documentation does not suggest importing or falling back to it
 
 ### Requirement: Devsy-branded names for new Proxmox resources
 
@@ -70,13 +70,17 @@ The provider SHALL create, start, stop, report the status of, and delete the Pro
 - **WHEN** Devsy starts, stops, checks, or deletes an existing machine
 - **THEN** the provider applies that operation to the associated VM and reports the resulting status using Devsy's expected values
 
-### Requirement: Existing Proxmox VM continuity
+### Requirement: No fallback to legacy Proxmox resources
 
-The provider SHALL discover and manage VMs created with legacy DevPod-era Proxmox names for the same machine identity, without renaming, deleting, or cloning a replacement VM as a side effect of reconnecting or resuming.
+The provider SHALL discover and manage machines only by Devsy-branded Proxmox identifiers and SHALL NOT adopt, resume, modify, rename, or delete resources created with legacy DevPod-era names.
 
-#### Scenario: Reconnect to a VM created before migration
-- **WHEN** Devsy resumes a machine whose existing VM uses the current `devpod-<machine-id>` resource name
-- **THEN** the provider finds and manages that VM rather than creating a second VM or losing access to its workspace data
+#### Scenario: Lifecycle lookup finds only a legacy VM
+- **WHEN** a Devsy lifecycle operation has no matching Devsy-named VM but a VM with the same machine identity has a legacy DevPod-era name
+- **THEN** the provider reports the Devsy machine as not found and does not fall back to or alter the legacy VM
+
+#### Scenario: Create a machine whose identity has a legacy VM
+- **WHEN** Devsy creates a new machine with an identity that exists only on a legacy DevPod-named VM
+- **THEN** the provider creates a new VM using the Devsy naming scheme and leaves the legacy VM untouched
 
 ### Requirement: Automatic provider readiness after configuration
 
