@@ -2,7 +2,7 @@
 
 ## Context
 
-See `proposal.md` for motivation and `specs/proxmox-devsy-provider/spec.md` for behavior requirements. The current manifest routes `exec.command` through a Go subcommand that prints a DevPod helper template; the provider does not execute that template. Devsy's provider contract instead supplies `${COMMAND}` to the configured command for execution on the machine. The new create flow will use Devsy-branded identifiers; existing DevPod-named VMs are explicitly outside the migrated provider's lookup and lifecycle scope.
+See `proposal.md` for motivation and `specs/devsy-proxmox-provider/spec.md` for behavior requirements. The current manifest routes `exec.command` through a Go subcommand that prints a DevPod helper template; the provider does not execute that template. Devsy's provider contract instead supplies `${COMMAND}` to the configured command for execution on the machine. The new create flow will use Devsy-branded identifiers; existing DevPod-named VMs are explicitly outside the migrated provider's lookup and lifecycle scope.
 
 ## Goals / Non-Goals
 

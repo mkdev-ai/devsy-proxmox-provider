@@ -17,7 +17,7 @@ The provider currently provisions Proxmox VMs but still implements DevPod's prov
 
 ### New Capabilities
 
-- `proxmox-devsy-provider`: Configure the Proxmox machine provider in Devsy, provision and manage workspace VMs, and establish agent/SSH access reliably.
+- `devsy-proxmox-provider`: Configure the Proxmox machine provider in Devsy, provision and manage workspace VMs, and establish agent/SSH access reliably.
 
 ### Modified Capabilities
 
