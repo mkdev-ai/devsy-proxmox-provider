@@ -14,8 +14,8 @@ The provider's canonical source, metadata, and documented installation instructi
 - **WHEN** a user follows the provider installation instructions
 - **THEN** the Devsy CLI retrieves the provider from `github.com/mkdev-ai/devsy-proxmox-provider`
 
-#### Scenario: Resolve the renamed repository
-- **WHEN** a user opens the canonical repository URL after the rename
+#### Scenario: Resolve the canonical repository
+- **WHEN** a user opens the canonical repository URL
 - **THEN** it resolves to this provider repository, while the upstream fork URL continues to resolve to the upstream fork
 
 ### Requirement: Canonical checksum-verified releases
