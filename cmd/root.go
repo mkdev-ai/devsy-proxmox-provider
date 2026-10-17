@@ -19,8 +19,8 @@ var (
 	// Root command is exported for testing.
 	RootCmd = &cobra.Command{
 		Use:     "proxmox-provider",
-		Short:   "DevPod provider for Proxmox VE",
-		Long:    "Provisions KVM virtual machines on Proxmox VE to host DevPod development workspaces.",
+		Short:   "Devsy provider for Proxmox VE",
+		Long:    "Provisions KVM virtual machines on Proxmox VE to host Devsy development workspaces.",
 		Version: versionStr,
 	}
 )
@@ -104,7 +104,7 @@ func init() {
 	RootCmd.AddCommand(initCmd)
 }
 
-// statusCmd reports the VM status to DevPod.
+// statusCmd reports the VM status to Devsy.
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Report the status of a workspace VM",
