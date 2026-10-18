@@ -21,8 +21,8 @@
 
 ## 4. Devsy Integration Verification
 
-- [ ] 4.1 Establish and document the minimum supported Devsy CLI release, then validate provider installation and manifest initialization with that release and the current supported release.
-- [ ] 4.2 Add an environment-gated Proxmox acceptance test that configures the provider, creates a Devsy-named workspace VM, runs an SSH command through the injected agent, resumes that Devsy VM, and deletes it; verify a pre-existing DevPod-named VM is not selected or altered, guarantee cleanup, and document how to run the test when CI lacks Proxmox credentials.
-- [ ] 4.3 Run `go test ./...` and the Devsy acceptance test where Proxmox credentials are available; record the tested Devsy version and confirm the original `unexpected start line` failure no longer occurs.
+- [x] 4.1 Establish and document the minimum supported Devsy CLI release, then validate provider installation and manifest initialization with that release and the current supported release.
+- [x] 4.2 Add an environment-gated Proxmox acceptance test that configures the provider, creates a Devsy-named workspace VM, runs an SSH command through the injected agent, resumes that Devsy VM, and deletes it; verify a pre-existing DevPod-named VM is not selected or altered, guarantee cleanup, and document how to run the test when CI lacks Proxmox credentials.
+- [x] 4.3 Run `go test ./...` and the Devsy acceptance test where Proxmox credentials are available; record the tested Devsy version and confirm the original `unexpected start line` failure no longer occurs.
 - [x] 4.4 Coordinate with `rename-proxmox-provider-to-devsy` to set the Go module path/imports and self-referencing provider/docs URLs to `github.com/mkdev-ai/devsy-proxmox-provider`; leave upstream `iamveen/devpod-proxmox-provider` untouched.
 - [ ] 4.5 After task 4.3 passes, commit any remaining integration-only changes separately as `test(provider): verify Devsy Proxmox workspace flow`; verify the commit contains only end-to-end/integration coverage and required fixes.
