@@ -196,19 +196,62 @@ The provider should never run with live root access. Use this least-privilege se
 
 Local verification (no live Proxmox needed) — run `bash -n scripts/setup.sh scripts/uninstall.sh` and review the ACL/role semantics above. The `pveum` commands are standard Proxmox practice and do not require a live endpoint to reason about.
 
-## Building from Source
+## Release and Distribution
 
-Requires Go 1.22+.
+Every tagged release publishes **four compiled binaries** (one per platform) plus a
+`provider.yaml` manifest that ties them together with checksums. This is what Devsy
+fetches when installing the provider — it is **not** the raw source tree.
+
+### What a release contains
+
+| Asset | OS | Arch | Format |
+|---|---|---|---|
+| `proxmox-provider-linux-amd64` | Linux | amd64 | ELF, statically linked |
+| `proxmox-provider-linux-arm64` | Linux | arm64 | ELF, statically linked |
+| `proxmox-provider-darwin-amd64` | macOS | amd64 | Mach-O, x86_64 |
+| `proxmox-provider-darwin-arm64` | macOS | arm64 | Mach-O, arm64 |
+
+Each binary is built with `CGO_ENABLED=0` and linked statically, so it has no
+shared-library dependencies and runs anywhere that platform is available.
+
+### Installing the provider (recommended)
+
+Devsy installs the provider by downloading the manifest from the release and
+verifying each binary against its SHA-256 checksum:
+
+```bash
+# Install the latest provider on your machine
+devsy provider add github.com/mkdev-ai/devsy-proxmox-provider
+```
+
+Devsy reads `provider.yaml` from the release; the checksums let it prove the
+platform binary has not been tampered with. You do not need to build from source.
+
+### Building and publishing a release (developers)
+
+```bash
+# Build all 4 platform binaries (CGO_ENABLED=0, static, version pinned)
+GOOS=linux GOARCH=amd64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-linux-amd64 .
+GOOS=linux GOARCH=arm64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-linux-arm64 .
+GOOS=darwin GOARCH=amd64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-darwin-amd64 .
+GOOS=darwin GOARCH=arm64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-darwin-arm64 .
+
+# Generate provider.yaml with checksums
+python3 scripts/generate_provider_yaml.py
+
+# Commit and tag, then push the tag -- the CI release workflow publishes assets
+git add provider.yaml provider.yaml.tmpl
+git commit -m "release(v0.2.0): build 4-platform provider binaries and manifest"
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+### Building from source (alternative)
 
 ```bash
 git clone https://github.com/mkdev-ai/devsy-proxmox-provider
 cd devsy-proxmox-provider
 go build -o dist/proxmox-provider .
-```
-
-Run tests:
-
-```bash
 go test ./...
 ```
 

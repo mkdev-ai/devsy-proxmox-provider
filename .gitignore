@@ -2,7 +2,15 @@
 provider.yaml
 
 # Build output
+dist/
 dist/proxmox-provider
+dist/proxmox-provider-*
+
+# Release tooling (build scripts and generators)
+.github/workflows/*.py
+.github/workflows/*.sh
+.github/workflows/*/*.sh
+.github/workflows/*/*.py
 
 # Local dev environment (contains secrets)
 mise.local.toml
