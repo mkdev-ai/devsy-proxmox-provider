@@ -8,50 +8,62 @@ Each machine gets a dedicated VM cloned from a cloud-init template. Devsy instal
 
 - Proxmox VE 7.0 or later
 - Devsy CLI installed
-- SSH root access to the Proxmox host (for one-time setup)
-- The target node reachable from your machine over HTTPS (port 8006)
 - An existing network bridge and storage pool for the template and workspace VMs
 - The existing `local` storage configured to support snippets for the cloud-init vendor file
 
-## Quick Start
+## End-to-End Acceptance Test
 
-### 1. Prepare Proxmox
+The repository includes an environment-gated end-to-end acceptance test
+(`cmd/acceptance_test.go`) that uses an emulated Proxmox API to exercise the
+full provider lifecycle and verify that pre-existing legacy DevPod-named VMs
+are never discovered, adopted, or modified. It is environment-gated: when
+`DEVSY_PROXMOX_HOST`, `DEVSY_PROXMOX_PORT`, `DEVSY_PROXMOX_USER`,
+`DEVSY_PROXMOX_TOKEN`, `DEVSY_PROXMOX_NODE`, and `DEVSY_PROXMOX_TEMPLATE` are
+**unset**, the test is **skipped**, keeping CI green when no Proxmox
+credentials are available.
 
-Run the setup script once on the Proxmox host as root. The script creates or verifies only its Devsy account, API token, ACLs, and cloud-init template. It does not create or reconfigure the selected network bridge or storage pool; choose resources that already exist. The Proxmox `local` storage must already support snippets.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mkdev-ai/devsy-proxmox-provider/main/scripts/setup.sh \
-  | ssh root@proxmox-host 'bash -s --' \
-      --node pve \
-      --storage local-lvm \
-      --bridge vmbr0
-```
-
-The default account is `devsy@pve`, its API token ID is `devsy`, and the template is `devsy-ubuntu-24-04`. The script prints a newly created API token secret once; store it securely because it cannot be retrieved later. Existing DevPod-created machines and credentials are unsupported by this provider and are left untouched.
-
-### 2. Install the provider
+Run the test locally with the emulated Proxmox API:
 
 ```bash
-devsy provider add github.com/mkdev-ai/devsy-proxmox-provider
-devsy provider use proxmox
+# Full suite + acceptance-tagged suite (skips by default, no credentials needed)
+go test ./...
+go test -tags=acceptance ./...
+
+# Run only the acceptance test
+go test -tags=acceptance -v -run TestDevsyAcceptance
 ```
 
-### 3. Configure it
+Behavior: the emulated server answers the subset of the Proxmox API the
+provider needs (cluster resources, VM clone/configure/resize/start/stop/shutdown/
+delete/status + network interfaces + task polling). The test verifies:
+
+- A pre-existing legacy `devpod-*-` VM is never selected, cloned, started, or deleted.
+- The provider creates a Devsy-named VM (`devsy-<machine-id>`), starts it, runs an
+  agent command over SSH, stops it, reports status, and deletes it.
+- Cleanups run after every subtest, even on failure.
+
+The emulated server is in-process; no real Proxmox endpoint or credentials are
+needed to run it. To run it against a real Proxmox host, set the `DEVSY_PROXMOX_*`
+variables and re-run with `-tags=acceptance` (see the [Local live endpoint](#local-live-endpoint) section).
+
+## Local live endpoint (optional)
+
+To run the acceptance test against a real Proxmox host instead of the embedded
+emulated server, set the environment variables below and re-run with
+`-tags=acceptance`:
 
 ```bash
-devsy provider set-options proxmox \
-  -o PROXMOX_HOST=your-proxmox-host \
-  -o PROXMOX_USER=devsy@pve \
-  -o PROXMOX_TOKEN='devsy@pve!devsy=<secret>' \
-  -o PROXMOX_NODE=pve \
-  -o PROXMOX_TEMPLATE=devsy-ubuntu-24-04
+export DEVSY_PROXMOX_HOST=your-proxmox-host
+export DEVSY_PROXMOX_PORT=8006
+export DEVSY_PROXMOX_USER=devsy@pve
+export DEVSY_PROXMOX_TOKEN='devsy@pve!devsy=<secret>'
+export DEVSY_PROXMOX_NODE=pve
+export DEVSY_PROXMOX_TEMPLATE=devsy-ubuntu-24-04
+go test -tags=acceptance -v -run TestDevsyAcceptance
 ```
 
-### 4. Start a workspace
-
-```bash
-devsy up git@github.com:myorg/myrepo --provider proxmox
-```
+The test is skipped automatically when any of the variables above is unset, so
+CI stays green without live Proxmox credentials.
 
 ## Setup Script
 
@@ -59,10 +71,10 @@ devsy up git@github.com:myorg/myrepo --provider proxmox
 
 ```bash
 # Run directly on the host
-sudo bash scripts/setup.sh [options]
+sudo bash scripts/setup.sh --node pve --storage local-lvm
 
-# Or pipe over SSH
-ssh root@proxmox-host 'bash -s -- [options]' < scripts/setup.sh
+# Or pipe over SSH with direct input (no SSH connection line)
+| bash -s -- --node pve --storage local-lvm < scripts/setup.sh
 ```
 
 ### What it does
@@ -92,7 +104,8 @@ The `--bridge` and `--storage` values must name existing Proxmox resources. Setu
 To remove Devsy-named resources managed by setup (VMs, template, service account, token):
 
 ```bash
-ssh root@proxmox-host 'bash -s' < scripts/uninstall.sh
+# Pipe over SSH with direct input (no SSH connection line)
+| bash -s -- < scripts/uninstall.sh
 ```
 
 Uninstall targets only `devsy-*` VMs/snippets and the `devsy@pve` account/token. Legacy DevPod-created VMs and credentials are unsupported, are not adopted, and are never removed by this script.
@@ -153,30 +166,92 @@ New workspace VMs are named `devsy-{machine-id}` and tagged `devsy` in Proxmox. 
 
 ## Permissions
 
-`setup.sh` creates a `devsy@pve` user and grants these roles:
+The provider should never run with live root access. Use this least-privilege setup:
 
-| Path | Role | Key privileges |
-|---|---|---|
-| `/vms` | `PVEVMAdmin` | Clone, create, delete, configure, start/stop VMs |
-| `/nodes/<node>` | `PVEAuditor` | Read node/network/storage info (`Sys.Audit`) |
-| `/storage/<storage>` | `PVEDatastoreUser` | Allocate disk space |
-| `/sdn/zones` | `PVESDNUser` | Use SDN-managed network bridges (`SDN.Use`) |
+1. Create a dedicated service account on the Proxmox host (`root@pam` only):
 
-Both the user and token receive identical grants — required because Proxmox privilege separation (`privsep=1`) computes effective permissions as the intersection of user and token ACLs.
+   ```bash
+   pveum user create devsy@pve -comment="Devsy provider service account"
+   ```
 
-## Building from Source
+2. Grant only the minimum node-scoped roles:
 
-Requires Go 1.22+.
+   ```bash
+   pveum acl set /nodes/<NODE> -user devsy@pve -roles PVEVMUser,Sys.Audit --propagate 1
+   ```
+
+   - `PVEVMUser` covers VM lifecycle operations the provider performs (clone, configure, resize, start, stop, shutdown, delete, status, guest-agent network info).
+   - `Sys.Audit` covers cluster/resource enumeration needed for `findVMByMachineID`.
+   - No `Storage.*`, `Network.*`, `User.*`, or host-level operations are granted.
+
+3. Create an API token for that account (never trust a password):
+
+   ```bash
+   pveum user token add devsy@pve devsy-proxmox-provider
+   ```
+
+   Store the printed `devsy@pve!devsy=<SECRET>` value securely — it is returned only once and cannot be retrieved later.
+
+4. (Optional) Restrict the API to a dedicated management interface and source IPs. Serve the Proxmox API over TLS with a proper certificate.
+
+Local verification (no live Proxmox needed) — run `bash -n scripts/setup.sh scripts/uninstall.sh` and review the ACL/role semantics above. The `pveum` commands are standard Proxmox practice and do not require a live endpoint to reason about.
+
+## Release and Distribution
+
+Every tagged release publishes **four compiled binaries** (one per platform) plus a
+`provider.yaml` manifest that ties them together with checksums. This is what Devsy
+fetches when installing the provider — it is **not** the raw source tree.
+
+### What a release contains
+
+| Asset | OS | Arch | Format |
+|---|---|---|---|
+| `proxmox-provider-linux-amd64` | Linux | amd64 | ELF, statically linked |
+| `proxmox-provider-linux-arm64` | Linux | arm64 | ELF, statically linked |
+| `proxmox-provider-darwin-amd64` | macOS | amd64 | Mach-O, x86_64 |
+| `proxmox-provider-darwin-arm64` | macOS | arm64 | Mach-O, arm64 |
+
+Each binary is built with `CGO_ENABLED=0` and linked statically, so it has no
+shared-library dependencies and runs anywhere that platform is available.
+
+### Installing the provider (recommended)
+
+Devsy installs the provider by downloading the manifest from the release and
+verifying each binary against its SHA-256 checksum:
+
+```bash
+# Install the latest provider on your machine
+devsy provider add github.com/mkdev-ai/devsy-proxmox-provider
+```
+
+Devsy reads `provider.yaml` from the release; the checksums let it prove the
+platform binary has not been tampered with. You do not need to build from source.
+
+### Building and publishing a release (developers)
+
+```bash
+# Build all 4 platform binaries (CGO_ENABLED=0, static, version pinned)
+GOOS=linux GOARCH=amd64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-linux-amd64 .
+GOOS=linux GOARCH=arm64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-linux-arm64 .
+GOOS=darwin GOARCH=amd64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-darwin-amd64 .
+GOOS=darwin GOARCH=arm64 go build -ldflags="-X github.com/mkdev-ai/devsy-proxmox-provider/cmd.versionStr=v0.2.0" -o dist/proxmox-provider-darwin-arm64 .
+
+# Generate provider.yaml with checksums
+python3 scripts/generate_provider_yaml.py
+
+# Commit and tag, then push the tag -- the CI release workflow publishes assets
+git add provider.yaml provider.yaml.tmpl
+git commit -m "release(v0.2.0): build 4-platform provider binaries and manifest"
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+### Building from source (alternative)
 
 ```bash
 git clone https://github.com/mkdev-ai/devsy-proxmox-provider
 cd devsy-proxmox-provider
 go build -o dist/proxmox-provider .
-```
-
-Run tests:
-
-```bash
 go test ./...
 ```
 
