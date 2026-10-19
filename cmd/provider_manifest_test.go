@@ -20,6 +20,9 @@ func TestProviderManifest_DevsyContract(t *testing.T) {
 	}
 	manifest := string(manifestBytes)
 
+	// No literal tilde is allowed: Devsy's daemon installer rejects a
+	// non-expanded "~" as a non-absolute state root. The agent dataPath
+	// must be absolute, or omitted so Devsy uses its own absolute default.
 	for _, obsolete := range []string{"DEVPOD", "~/.devpod", "helper sh -c"} {
 		if strings.Contains(manifest, obsolete) {
 			t.Errorf("manifest contains obsolete CLI/agent syntax %q", obsolete)
@@ -27,7 +30,6 @@ func TestProviderManifest_DevsyContract(t *testing.T) {
 	}
 	for _, required := range []string{
 		"path: ${DEVSY}",
-		"dataPath: ~/.devsy/data",
 		"command: ${PROXMOX_PROVIDER} command \"${COMMAND}\"",
 		"init: ${PROXMOX_PROVIDER} init",
 		"create: ${PROXMOX_PROVIDER} create",

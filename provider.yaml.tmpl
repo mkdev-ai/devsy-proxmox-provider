@@ -68,7 +68,10 @@ options:
     default: "l26"
 agent:
   path: ${DEVSY}
-  dataPath: ~/.devsy/data
+  # Do not pin dataPath: Devsy's own default absolute state root applies.
+  # Override per-user with DEVSY_HOME (or --home) instead of hardcoding a
+  # guest-users home path the provider cannot know. Devsy rejects a literal ~,
+  # so omitting it avoids the "state root must be absolute" error.
   inactivityTimeout: ""
   injectGitCredentials: false
   injectDockerCredentials: false
