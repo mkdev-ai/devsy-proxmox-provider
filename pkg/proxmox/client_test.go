@@ -246,7 +246,6 @@ func TestShutdownVM(t *testing.T) {
 	}
 }
 
-
 func TestGetVMStatus(t *testing.T) {
 	server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/status/current") {

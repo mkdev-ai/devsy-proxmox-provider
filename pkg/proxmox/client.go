@@ -395,4 +395,3 @@ func (c *HTTPClient) WaitForTask(ctx context.Context, node, upid string, timeout
 		}
 	}
 }
-
