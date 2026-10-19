@@ -9,57 +9,42 @@ to be prepared and started.
 
 ## ADDED Requirements
 
-### Requirement: Devsy daemon state root must be absolute
+### Requirement: Devsy agent dataPath must be absolute in the provider manifest
 
-The Devsy daemon installer SHALL expand a leading `~` to the real home directory
-(`os.UserHomeDir`) and SHALL require the resolved daemon state root to be an
-absolute path. It SHALL NOT write to a relative location or to a non-expanded `~`.
+The provider SHALL NOT pin a literal `~` in the agent `dataPath` in its
+provider manifest. Devsy's daemon installer rejects a non-expanded `~`
+as a non-absolute state root and aborts workspace creation.
 
-#### Scenario: state root resolves to an absolute path from $HOME
+#### Scenario: manifest omits dataPath
 
-- **WHEN** the Devsy daemon installer chooses its default state root and `$HOME`
-  is set to a valid directory
-- **THEN** the root is `$HOME/.devsy/data` resolved to an absolute path and daemon
-  installation proceeds
+- **WHEN** a user adds the provider via Devsy
+- **THEN** the manifest does not contain `dataPath: ~` and Devsy uses its own
+  absolute default state root
 
-#### Scenario: unexpanded tilde is rejected
+#### Scenario: manifest dataPath explicit
 
-- **WHEN** the daemon installer resolves a state root equal to the literal string
-  `~/.devsy/data` without expanding it
-- **THEN** it exits with an error naming the bad root and the required absolute
-  form, and does not attempt to write to it
+- **WHEN** the manifest sets agent dataPath
+- **THEN** it is an absolute path (or absent), and a literal `~` is rejected
 
-### Requirement: docker-credential-devsy helper is discoverable and invocable
+### Requirement: Daemon installer never receives a non-absolute state root
 
-The provider workspace SHALL make `docker-credential-devsy` available on
-`$PATH` and SHALL guarantee the Docker CLI can invoke it when resolving
-credentials for a registry.
+The provider SHALL configure Devsy so the daemon installer never sees a literal
+`~` or a relative path as the daemon state root.
 
-#### Scenario: helper is present on PATH
+#### Scenario: devsy up creates a workspace
 
-- **WHEN** provider workspace setup completes
-- **THEN** the `docker-credential-devsy` executable is installed in a
-  PATH-accessible directory and `command -v docker-credential-devsy` locates it
+- **WHEN** `devsy up` is run for a workspace
+- **THEN** the Devsy daemon installs successfully and the provider reports the
+  workspace as ready, without emitting `state root must be absolute`.
 
-#### Scenario: Docker invokes the helper
+### Requirement: Document daemon data root override
 
-- **WHEN** the Docker CLI resolves registry credentials
-- **THEN** `docker-credential-devsy get` returns the credential map for the
-  requested registry host, and devcontainer prepare/start proceeds
+The provider documentation SHALL document how to override the Devsy daemon data
+root for a user (`DEVSY_HOME` / `--home`), rather than requiring the provider
+manifest to hardcode a per-user path.
 
-### Requirement: devcontainer prepare and start succeed end to end
+#### Scenario: user configures a custom daemon data root
 
-A created workspace SHALL be started so that the devcontainer is prepared and
-running, subject to the two requirements above.
-
-#### Scenario: full workspace start
-
-- **WHEN** a Devsy workspace is created and launched
-- **THEN** the Devsy daemon installs with an absolute state root, the VM is
-  started, an IP is resolved, the agent connects, the devcontainer prepares, and
-  the container starts
-
-## Notes
-
-- This change is environment/credential-setup focused; it does not amend the
-  Proxmox provisioning or lifecycle logic.
+- **WHEN** a user needs a custom daemon data root on their host
+- **THEN** they set `DEVSY_HOME` or pass `--home=PATH`; the provider manifests
+  remain correct and do not hardcoding a guest-user home directory.

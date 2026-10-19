@@ -54,8 +54,7 @@ steps are environment/credential-setup concerns, not Proxmox provisioning logic.
 
 ## Open Questions
 
-- Which `docker-credential-devsy` binary/version should be shipped/used? Confirm
-  during implementation against the Devsy CLI release used in CI.
-- Is the helper already built in the repo, or does the provider shell out to the
-  Devsy CLI to fetch/install it? Decide the install step (download vs
-  build-from-source).
+- Confirm the exact Devsy CLI release whose daemon installer rejects a literal
+  `~` in `dataPath`; the fix removes it from the manifest so the CLI default
+  (absolute) applies. Verified against the documented `DEVSY_HOME`/`--home`
+  override path for a custom root.

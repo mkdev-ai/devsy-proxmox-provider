@@ -29,26 +29,20 @@ make `docker-credential-devsy` discoverable and invocable by Docker.
 
 ## What Changes
 
-- **NEW** Validate and normalize the Devsy daemon state root to an absolute path
-  derived from `$HOME`; reject unexpanded/relative roots with an actionable error
-  naming the bad root and the required absolute form.
-- **NEW** Ensure the `docker-credential-devsy` helper is installed into a
-  PATH-accessible directory and verify the Docker CLI can invoke it when resolving
-  registry credentials.
-- **NEW** Add contract tests for daemon-root normalization and for
-  `docker-credential-devsy` discoverability/invocability.
-- **NEW** Document the required environment prerequisites (absolute absolute
-  daemon state root or set `DEVSSY_DATA_ROOT`, and the PATH entry for
-  `docker-credential-devsy`).
+- **NEW** Make the devcontainer start reliably by removing the `dataPath`
+  tilde from the provider manifest (`provider.yaml.tmpl`) so Devsy's daemon
+  installer no longer rejects it as a non-absolute root, and relax the
+  provider-manifest contract test to no longer pin the obsolete tilde.
+- **NEW** Document the environment prerequisite (`DEVSY_HOME`) for overriding
+  the daemon data root per user.
 
 ## Capabilities
 
 ### New Capabilities
 
 - `devsy-proxmox-provider`: provision and manage Proxmox workspace VMs while
-  guaranteeing the Devsy daemon has an absolute state root and the Docker CLI can
-  authenticate to registries via `docker-credential-devsy` so a devcontainer can be
-  prepared and started.
+  guaranteeing the Devsy daemon installs with a Devsy-supported absolute state
+  root, so `devsy up`/workspace creation starts cleanly.
 
 ### Modified Capabilities
 
@@ -56,10 +50,7 @@ make `docker-credential-devsy` discoverable and invocable by Docker.
 
 ## Impact
 
-Affected files: provider daemon-install logic (wherever the daemon state root is
-resolved), the Docker credential-helper setup/install step, unit and integration
-tests, and user-facing setup/run documentation. Prereqs: a working Devsy CLI,
-an installed `docker-credential-devsy` binary, and a valid absolute daemon data
-root. This change is env/credential-setup focused; it does not amend Proxmox
-provisioning or lifecycle logic (those are covered by the `migrate-*`/`rename-*`
-changes).
+- `provider.yaml.tmpl` (agent.dataPath) and `cmd/provider_manifest_test.go`
+  (contract test).
+- `openspec/changes/fix-devcontainer-startup/*`.
+- Docs: setup/run instructions, environment prerequisites.
