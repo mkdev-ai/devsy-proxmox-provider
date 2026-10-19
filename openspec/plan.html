@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenSpec Plan: Delete Machine Exit Status 1</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; margin: 0; padding: 24px; background: #f4f5f7; line-height: 1.5; }
+  .container { max-width: 900px; margin: 0 auto; background: #ffffff; padding: 32px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #e4e6e8; }
+  h3 { font-size: 14px; margin: 16px 0 6px; color: #333; }
+  p { margin: 8px 0; }
+  code, .mono { background: #eef1f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; font-family: 'JetBrains Mono', Consolas, monospace; }
+  pre { background: #0f1115; color: #d4d4d4; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.6; }
+  pre .err { color: #f85149; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .root { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .goal { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .nongoal { background: #fce4ec; border: 1px solid #ef9a9a; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .bad { color: #c62828; font-weight: 600; }
+  .good { color: #2e7d32; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+  th, td { border: 1px solid #d9dce1; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f0f2f5; }
+  .meta { font-size: 12.5px; color: #555; margin-top: 8px; }
+  .steps { list-style: none; padding: 0; }
+  .steps li { margin: 8px 0; padding-left: 26px; position: relative; }
+  .steps li::before { content: "[]"; position: absolute; left: 0; font-weight: 700; color: #666; }
+  .footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #e4e6e8; font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>OpenSpec Plan: Delete Machine Exit Status 1</h1>
+  <p><strong>Change:</strong> <code>delete-running-vm-machine-exit-status-1</code></p>
+  <p><strong>Repo:</strong> <code>github.com/mkdev-ai/devsy-proxmox-provider</code></p>
+  <p><strong>Trigger:</strong> <code>error failed to delete machine: machineId=python-af390, err=run provider command "${PROXMOX_PROVIDER} delete" (): exit status 1</code></p>
+
+  <h2>Problem</h2>
+  <p>Running <code>devsy up</code> (or an explicit provider delete) on a <strong>running</strong> workspace VM ends with a non-zero provider exit, surfaced to the user as <code>exit status 1</code>.</p>
+  <p>Live logs from the failing host confirm the root cause:</p>
+  <pre><span class="err">Error: deleting VM: API error: HTTP 501 — {"message":"Method 'POST /nodes/sojki/qemu/3006/destroy' not implemented","data":null}</span></pre>
+
+  <h2>Root cause (verified from live logs + <code>main</code> on default branch)</h2>
+  <div class="root">
+    <ul>
+      <li><strong>DeleteVM uses the wrong HTTP method.</strong> <code>pkg/proxmox/client.go</code> POSTs to <code>/nodes/{node}/qemu/{vmid}/destroy</code>. Proxmox implements the VM-destroy API as <b>DELETE /nodes/{node}/qemu/{vmid}</b> with <code>purge=1</code> and <code>destroy-unreferenced-disks=1</code> query params (matching <code>qm destroy --purge</code>). The live host returns HTTP 501 "Method POST ... not implemented", so delete always exits 1 on a real Proxmox node.</li>
+      <li><code>cmd/lifecycle.go</code> also sleeps 2s and ignores <code>StopVM</code>, so it never waits for the shutdown task to finish. This is secondary (the 501 fires before the destroy path reaches a running-VM check), but it can cause transient 500s on the destroy when the VM is still up.</li>
+    </ul>
+  </div>
+
+  <h2>Goals</h2>
+  <div class="goal">
+    <ul>
+      <li><code>devsy provider delete</code> (and <code>devsy up</code> cleanup) exits 0 when the machine and its VM are removed on a real Proxmox VE host.</li>
+      <li><code>DeleteVM</code> calls the correct Proxmox API: <code>DELETE /nodes/{node}/qemu/{vmid}</code>, with <code>purge=1</code> and <code>destroy-unreferenced-disks=1</code> so the VM and disks are removed.</li>
+      <li>The shutdown task is actually waited for before destroy (no transient 500s).</li>
+      <li>A temporary retry is added for transient errors on destroy so a transient Proxmox 500 still lets delete succeed.</li>
+    </ul>
+  </div>
+
+  <h2>Non-goals</h2>
+  <div class="nongoal">
+    <ul>
+      <li>Changing how Devsy names the provider binary or hosts it.</li>
+      <li>Multi-cluster / cross-node deletion.</li>
+      <li>Handling a VM stuck in a crashed state forever (timed out, not fixed).</li>
+    </ul>
+  </div>
+
+  <h2>Design summary</h2>
+  <ul>
+    <li><strong><code>pkg/proxmox/client.go</code> DeleteVM:</strong> DELETE /nodes/{node}/qemu/{vmid} with purge=1 + destroy-unreferenced-disks=1. Add transient-error retry (1s/2s/4s, max 3) and surface the Proxmox API error detail in the wrapped error.</li>
+    <li><strong><code>cmd/lifecycle.go</code> runDelete:</strong> replace the sleep + ignored StopVM with a real WaitForTask on the shutdown UPID. Only call DeleteVM(..., true) after the shutdown task reports stopped/OK. Keep the emergency-cleanup step (stop, destroy without purge).</li>
+    <li><strong>Tests:</strong> contract cases for running-VM delete, transient 500 retry, and an end-to-end TestRunDelete.</li>
+  </ul>
+
+  <h2>Implementation tasks</h2>
+  <ol class="steps">
+    <li>Write a failing unit test that mimics a running VM (destroy returns HTTP 501/500) and confirm the current code returns exit status 1.</li>
+    <li>Fix the destroy endpoint: DELETE /nodes/{node}/qemu/{vmid} with purge=1 + destroy-unreferenced-disks=1 (replace the POST /destroy path).</li>
+    <li>Change the HTTP method to DELETE and add a transient-error retry (1s/2s/4s, max 3) for HTTP 5xx / API errors on the destroy request.</li>
+    <li>Surface the underlying Proxmox API error detail in the wrapped error.</li>
+    <li>Remove the time.Sleep(2 * time.Second) hack and the ignored StopVM call in runDelete.</li>
+    <li>Wait for the shutdown task with WaitForTask (capped at ~30s) and only proceed to destroy if the task reports stopped + OK.</li>
+    <li>Keep the emergency-cleanup step (stop, destroy without purge) after a transient destroy failure.</li>
+    <li>Add contract tests: TestDeleteVM_RunningVM, TestDeleteVM_Transient500, TestRunDelete.</li>
+    <li>Extend env-gated acceptance (TestDevsyAcceptance): create a devsy-named VM, start it, delete it, assert no leftover VM and no orphaned finalizer.</li>
+    <li>Run <code>go test -tags=acceptance -v -run TestDevsyAcceptance</code> with <code>DEVSY_PROXMOX_*</code> set and verify exit 0.</li>
+    <li>Update <code>README.md</code> delete/cli docs to describe running-machine delete and emergency cleanup.</li>
+  </ol>
+
+  <p class="meta">Plan produced from verified reads of live logs and <code>main</code>. Artifacts: <code>proposal.md</code>, <code>design.md</code>, <code>tasks.md</code>, <code>spec.md</code>, <code>plan.pdf</code>, <code>plan.html</code>. Go implementation + tests are pending (not yet written).</p>
+</div>
+</body>
+</html>

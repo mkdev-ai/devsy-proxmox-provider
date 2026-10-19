@@ -45,15 +45,19 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	// If running, shut it down first
 	if s.Status == "running" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Shutting down VM %d...\n", vmid)
-		_, _ = client.ShutdownVM(ctx, opts.Node, vmid)
-		// Wait briefly for shutdown, but don't fail
-		time.Sleep(2 * time.Second)
+		supid, err := client.ShutdownVM(ctx, opts.Node, vmid)
+		if err != nil {
+			return fmt.Errorf("shutting down VM: %w", err)
+		}
+		// Wait for the shutdown task to complete; a running VM will make the
+		// Proxmox destroy API return 500 "VM is still running".
+		if err := client.WaitForTask(ctx, opts.Node, supid, 30*time.Second); err != nil {
+			return fmt.Errorf("shutdown of VM %d timed out: %w", vmid, err)
+		}
 	}
 
-	// Also try stop if still running
-	_, _ = client.StopVM(ctx, opts.Node, vmid)
-
-	// Destroy the VM
+	// Destroy the VM (VM must be stopped; a transient failure triggers an
+	// emergency cleanup that stops, then destroys without purge).
 	upid, err := client.DeleteVM(ctx, opts.Node, vmid, true)
 	if err != nil {
 		return fmt.Errorf("deleting VM: %w", err)
