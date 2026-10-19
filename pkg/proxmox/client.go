@@ -269,16 +269,65 @@ func (c *HTTPClient) ShutdownVM(ctx context.Context, node string, vmid int) (str
 
 // DeleteVM destroys a VM and its disks.
 func (c *HTTPClient) DeleteVM(ctx context.Context, node string, vmid int, purge bool) (string, error) {
-	path := fmt.Sprintf("/nodes/%s/qemu/%d/destroy", node, vmid)
+	// Proxmox implements the VM-destroy API as DELETE /nodes/{node}/qemu/{vmid}
+	// with purge and destroy-unreferenced-disks query params (qm destroy --purge).
+	// It does NOT implement POST /nodes/{node}/qemu/{vmid}/destroy, which returns
+	// HTTP 501 "not implemented".
+	path := fmt.Sprintf("/nodes/%s/qemu/%d", node, vmid)
+
+	// Build query string: query values go in the URL, not the request body.
 	params := url.Values{}
 	if purge {
 		params.Set("purge", "1")
 	}
-	data, err := c.do(ctx, http.MethodPost, path, params)
-	if err != nil {
-		return "", err
+	params.Set("destroy-unreferenced-disks", "1")
+	fullPath := path
+	if len(params) > 0 {
+		fullPath += "?" + params.Encode()
 	}
-	return c.unmarshalTask(data)
+
+	// Retry transient Proxmox 5xx / destruction failures with fixed backoff.
+	// Destroy can transiently fail if the VM is still being torn down; the
+	// caller ensures the VM is stopped first, so these should be rare.
+	const retryDelay = 1 * time.Second
+	const maxRetries = 3
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(retryDelay):
+			}
+		}
+		data, err := c.do(ctx, http.MethodDelete, fullPath, nil)
+		if err == nil {
+			return c.unmarshalTask(data)
+		}
+		lastErr = err
+		// Only retry transient failures; surface permanent errors immediately.
+		if !isTransientDestroyError(err) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("deleting VM %d: %w", vmid, lastErr)
+}
+
+// isTransientDestroyError reports whether an error from the Proxmox destroy
+// request is transient (HTTP 5xx, or an API error indicating the VM is still
+// running / cannot be removed yet). Permanent errors are returned directly.
+func isTransientDestroyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Contains(err.Error(), "HTTP 5") {
+		return true
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "not implemented") ||
+		strings.Contains(errStr, "still running") ||
+		strings.Contains(errStr, "in use") ||
+		strings.Contains(errStr, "unable to remove VM")
 }
 
 // GetVMStatus returns the current status of a VM.
