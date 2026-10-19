@@ -246,30 +246,6 @@ func TestShutdownVM(t *testing.T) {
 	}
 }
 
-func TestDeleteVM(t *testing.T) {
-	server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.Path, "/qemu/101/destroy") {
-			t.Errorf("expected destroy path, got %s", r.URL.Path)
-		}
-		body, _ := io.ReadAll(r.Body)
-		params, _ := url.ParseQuery(string(body))
-		if params.Get("purge") != "1" {
-			t.Errorf("expected purge=1, got '%s'", params.Get("purge"))
-		}
-		json.NewEncoder(w).Encode(map[string]string{
-			"data": "UPID:pve1:00001234:destroy:qmdestroy:101:root@pam:",
-		})
-	})
-	defer server.Close()
-
-	upid, err := client.DeleteVM(t.Context(), "pve1", 101, true)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.HasPrefix(upid, "UPID:") {
-		t.Errorf("expected UPID, got: %s", upid)
-	}
-}
 
 func TestGetVMStatus(t *testing.T) {
 	server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
@@ -456,4 +432,126 @@ func checkAuth(t *testing.T, r *http.Request, expectedToken string) {
 	if auth != expected {
 		t.Errorf("expected auth header '%s', got '%s'", expected, auth)
 	}
+}
+
+func TestDeleteVM(t *testing.T) {
+	server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		// The correct Proxmox destroy endpoint is DELETE /nodes/{node}/qemu/{vmid}
+		// with purge=1 and destroy-unreferenced-disks=1 (not POST /destroy).
+		if r.Method != http.MethodDelete {
+			t.Errorf("expected DELETE, got %s", r.Method)
+		}
+		if !strings.Contains(r.URL.Path, "/qemu/101") {
+			t.Errorf("expected qemu 101 path, got %s", r.URL.Path)
+		}
+		params, _ := url.ParseQuery(r.URL.RawQuery)
+		if params.Get("purge") != "1" {
+			t.Errorf("expected purge=1, got '%s'", params.Get("purge"))
+		}
+		if params.Get("destroy-unreferenced-disks") != "1" {
+			t.Errorf("expected destroy-unreferenced-disks=1, got '%s'",
+				params.Get("destroy-unreferenced-disks"))
+		}
+		json.NewEncoder(w).Encode(map[string]string{
+			"data": "UPID:pve1:00001234:destroy:qmdestroy:101:root@pam:",
+		})
+	})
+	defer server.Close()
+
+	upid, err := client.DeleteVM(t.Context(), "pve1", 101, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(upid, "UPID:") {
+		t.Errorf("expected UPID, got: %s", upid)
+	}
+}
+
+func TestDeleteVM_NotDestroyEndpoint(t *testing.T) {
+	server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": "task/123456",
+		})
+	})
+	defer server.Close()
+
+	_, err := client.DeleteVM(t.Context(), "pve", 3006, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The old broken path was POST /nodes/.../destroy. The endpoint test above
+	// already asserts /nodes/pve/qemu/3006 with no /destroy segment, so a
+	// regression would be caught there.
+}
+
+func TestDeleteVM_Transient500Retry(t *testing.T) {
+	t.Run("retry_then_succeed", func(t *testing.T) {
+		var attempts int
+		server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts < 3 {
+				http.Error(w, `{"message":"task running","data":null}`, http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": "task/123456",
+			})
+		})
+		defer server.Close()
+
+		upid, err := client.DeleteVM(t.Context(), "pve", 3006, true)
+		if err != nil {
+			t.Fatalf("unexpected error after retries: %v", err)
+		}
+		if upid != "task/123456" {
+			t.Errorf("expected task/123456, got %s", upid)
+		}
+		if attempts != 3 {
+			t.Errorf("expected 3 attempts, got %d", attempts)
+		}
+	})
+
+	t.Run("no_retry_on_permanent_error", func(t *testing.T) {
+		server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, `{"message":"Method POST /nodes/pve/qemu/3006/destroy not implemented","data":null}`, http.StatusNotImplemented)
+		})
+		defer server.Close()
+
+		_, err := client.DeleteVM(t.Context(), "pve", 3006, true)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "not implemented") {
+			t.Errorf("expected error to contain 'not implemented', got %q", err)
+		}
+	})
+}
+
+func TestDeleteVM_TransientRunningRetry(t *testing.T) {
+	t.Run("retry_on_still_running", func(t *testing.T) {
+		var attempts int
+		server, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts < 2 {
+				http.Error(w, `{"message":"unable to remove VM 3006: still running","data":null}`, http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": "task/123456",
+			})
+		})
+		defer server.Close()
+
+		_, err := client.DeleteVM(t.Context(), "pve", 3006, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if attempts != 2 {
+			t.Errorf("expected 2 attempts, got %d", attempts)
+		}
+	})
 }
