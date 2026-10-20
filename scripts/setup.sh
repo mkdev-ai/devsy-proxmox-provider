@@ -12,10 +12,11 @@
 #   --bridge        Network bridge             (default: vmbr0)
 #   --vmid          Template VMID              (default: 9000)
 #   --image         distro:version             (default: ubuntu:24.04)
-#   --disk-format   raw | qcow2               (default: raw)
+#   --disk-format   raw | qcow2               default: raw
 #                   raw  — required for LVM/Ceph storage
 #                   qcow2 — use for directory-backed storage (local, NFS)
-#   --template-name Override template name    (default: devsy-<distro>-<version>)
+#   --template-disk-size   template root disk size in MiB    default: 3584
+#   --template-name   Override template name                 default: devsy-<distro>-<version>
 #   --dry-run       Print what would be done without making any changes
 #
 # Example (run directly on the host):
@@ -32,6 +33,7 @@ BRIDGE="vmbr0"
 VMID="9000"
 IMAGE="ubuntu:24.04"
 DISK_FORMAT="raw"
+TEMPLATE_DISK_SIZE="3584"   # template root disk size in MiB (Ubuntu cloud image default)
 TEMPLATE_NAME=""
 DRY_RUN=0
 
@@ -67,6 +69,7 @@ while [[ $# -gt 0 ]]; do
         --vmid)          VMID="$2";          shift 2 ;;
         --image)         IMAGE="$2";         shift 2 ;;
         --disk-format)   DISK_FORMAT="$2";   shift 2 ;;
+        --template-disk-size) TEMPLATE_DISK_SIZE="$2"; shift 2 ;;
         --template-name) TEMPLATE_NAME="$2"; shift 2 ;;
         --dry-run)       DRY_RUN=1;          shift   ;;
         --help|-h)       usage ;;
@@ -114,6 +117,7 @@ log "Bridge:        ${BRIDGE}"
 log "VMID:          ${VMID}"
 log "Image:         ${IMAGE} (codename: ${CODENAME})"
 log "Disk format:   ${DISK_FORMAT}"
+log "Template disk: ${TEMPLATE_DISK_SIZE} MiB"
 log "Template name: ${TEMPLATE_NAME}"
 [[ $DRY_RUN -eq 1 ]] && log "Mode:          dry-run (no changes will be made)"
 
@@ -273,11 +277,11 @@ run qm create "${VMID}" \
     --vga serial0
 [[ $DRY_RUN -eq 0 ]] && PARTIAL_VM_CREATED=1
 
-# Import disk
+# Import disk (size configurable so templates land at the desired capacity)
 if [[ $DRY_RUN -eq 1 ]]; then
-    log "[dry-run] qm importdisk ${VMID} ${IMG_PATH} ${STORAGE} --format ${DISK_FORMAT}"
+    log "[dry-run] qm importdisk ${VMID} ${IMG_PATH} ${STORAGE} --format ${DISK_FORMAT} --size ${TEMPLATE_DISK_SIZE}"
 else
-    qm importdisk "${VMID}" "${IMG_PATH}" "${STORAGE}" --format "${DISK_FORMAT}" > /dev/null
+    qm importdisk "${VMID}" "${IMG_PATH}" "${STORAGE}" --format "${DISK_FORMAT}" --size "${TEMPLATE_DISK_SIZE}" > /dev/null
 fi
 
 # Attach disk — read the volume name Proxmox assigned rather than guessing it

@@ -82,13 +82,15 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Step 4: If disk size exceeds template (default template ~17GB for cloud image), resize
-	templateDiskGB := 17 // Ubuntu cloud image default
-	if opts.DiskSize > templateDiskGB {
-		increase := opts.DiskSize - templateDiskGB
-		diskSize := fmt.Sprintf("+%dG", increase)
-		if err := client.ResizeDisk(ctx, opts.Node, vmid, "virtio0", diskSize); err != nil {
-			return fmt.Errorf("resizing disk: %w", err)
+	// Step 4: Resize the clone to the configured disk size.
+	// The template is pre-sized at template creation (scripts/setup.sh
+	// with --template-disk-size), so the clone starts at that size. This
+	// resizes the clone to exactly opts.DiskSize *before* the VM starts,
+	// so the workspace install (git clone / docker pull) always has the
+	// requested capacity.
+	if opts.DiskSize > 0 {
+		if err := client.ResizeDisk(ctx, opts.Node, vmid, "virtio0", fmt.Sprintf("%dG", opts.DiskSize)); err != nil {
+			return fmt.Errorf("resizing disk to %dG: %w", opts.DiskSize, err)
 		}
 	}
 
