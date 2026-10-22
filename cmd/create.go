@@ -30,14 +30,14 @@ func init() {
 
 func runCreate(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	oopts := options.FromEnv()
-	if err := oopts.Validate(); err != nil {
+	opts := options.FromEnv()
+	if err := opts.Validate(); err != nil {
 		return err
 	}
-	if oopts.MachineID == "" {
+	if opts.MachineID == "" {
 		return fmt.Errorf("MACHINE_ID not set")
 	}
-	if oopts.MachineFolder == "" {
+	if opts.MachineFolder == "" {
 		return fmt.Errorf("MACHINE_FOLDER not set")
 	}
 
@@ -48,7 +48,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := newProxmoxClient(oopts)
+	client := newProxmoxClient(opts)
 
 	// Step 1: Ensure SSH keypair exists in the machine folder, generating it if needed
 	privKeyPath := fmt.Sprintf("%s/id_ed25519", opts.MachineFolder)
