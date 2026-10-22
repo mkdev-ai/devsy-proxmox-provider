@@ -41,6 +41,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("MACHINE_FOLDER not set")
 	}
 
+	// The create flow (VM readiness check + IP wait) can take several minutes
+	// and must not be truncated by the command context, which Devsy may cancel
+	// after a short client-side timeout. Use a detached context so the whole
+	// create flow runs to completion before reporting the result.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	client := newProxmoxClient(opts)
 
 	// Step 1: Ensure SSH keypair exists in the machine folder, generating it if needed
