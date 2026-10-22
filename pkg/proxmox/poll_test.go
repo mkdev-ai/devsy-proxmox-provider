@@ -98,60 +98,47 @@ func TestWaitForIP_ContextCancelled(t *testing.T) {
 	}
 }
 
-// TestWaitForVMReady_ReturnsNil_WhenBothReadsSucceed verifies the VM is
-// reachable (qemu status = running AND guest agent answers) and WaitForVMReady
-// returns nil promptly.
-func TestWaitForVMReady_ReturnsNil_WhenBothReadsSucceed(t *testing.T) {
+// TestWaitForVMReady_ReturnsNil_WhenRunning_Only verifies the VM is
+// reachable (qemu status = running) and WaitForVMReady returns nil promptly.
+// The guest agent is NOT required here: it is a slow-but-healthy concern
+// handled by the separate IP-wait probe (WaitForIP) with bounded retry.
+func TestWaitForVMReady_ReturnsNil_WhenRunning_Only(t *testing.T) {
 	mock := &proxmox.MockClient{
 		VMStatus: &proxmox.VMStatus{Status: "running"},
-		Ifaces: []proxmox.NetworkInterface{
-			{
-				Name: "eth0",
-				IPAddresses: []proxmox.IPAddr{
-					{IPAddress: "10.0.0.5", Type: "ipv4", Prefix: 24},
-				},
-			},
-		},
 	}
 
 	err := proxmox.WaitForVMReady(t.Context(), mock, "pve1", 101, 2*time.Second)
 	if err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
-	if !mock.HasCall("GetVMStatus") || !mock.HasCall("GetNetworkInterfaces") {
-		t.Fatalf("expected both GetVMStatus and GetNetworkInterfaces calls, got %+v", mock.Calls)
+	if !mock.HasCall("GetVMStatus") {
+		t.Fatalf("expected GetVMStatus call, got %+v", mock.Calls)
 	}
 }
 
-// TestWaitForVMReady_ReturnsError_WhenAgentUnavailable verifies that when the
-// qemu status is running but the guest agent is unavailable, WaitForVMReady
-// keeps polling and returns an error after the timeout.
-func TestWaitForVMReady_ReturnsError_WhenAgentUnavailable(t *testing.T) {
+// TestWaitForVMReady_ReturnsError_WhenAgentUnavailableNoLongerFails verifies
+// that WaitForVMReady no longer hard-fails when the guest agent is slow:
+// the qemu status is running, and the agent is probed separately by
+// WaitForIP which retries with a bounded timeout.
+func TestWaitForVMReady_ReturnsError_WhenAgentUnavailableNoLongerFails(t *testing.T) {
 	mock := &proxmox.MockClient{
 		VMStatus: &proxmox.VMStatus{Status: "running"},
 		IfacesErr: fmt.Errorf("agent not ready"),
 	}
 
-	err := proxmox.WaitForVMReady(t.Context(), mock, "pve1", 101, 300*time.Millisecond)
-	if err == nil {
-		t.Fatal("expected error after timeout when agent is unavailable")
+	// The gate must not fail on the agent: only qemu status matters here.
+	err := proxmox.WaitForVMReady(t.Context(), mock, "pve1", 101, 2*time.Second)
+	if err != nil {
+		t.Fatalf("expected nil (status=running wins; agent probed separately), got %v", err)
 	}
 }
 
-// TestWaitForVMReady_ReturnsError_WhenStatusUnavailable verifies that when the
-// qemu status is not running, WaitForVMReady keeps polling and returns an
+// TestWaitForVMReady_ReturnsError_WhenStatusUnavailable verifies that when
+// the qemu status is not running, WaitForVMReady keeps polling and returns an
 // error after the timeout.
 func TestWaitForVMReady_ReturnsError_WhenStatusUnavailable(t *testing.T) {
 	mock := &proxmox.MockClient{
 		VMStatus: &proxmox.VMStatus{Status: "pending"},
-		Ifaces: []proxmox.NetworkInterface{
-			{
-				Name: "eth0",
-				IPAddresses: []proxmox.IPAddr{
-					{IPAddress: "10.0.0.5", Type: "ipv4", Prefix: 24},
-				},
-			},
-		},
 	}
 
 	err := proxmox.WaitForVMReady(t.Context(), mock, "pve1", 101, 300*time.Millisecond)
