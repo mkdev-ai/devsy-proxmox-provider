@@ -134,7 +134,7 @@ Set options with `devsy provider set-options proxmox -o KEY=VALUE`.
 | `PROXMOX_VM_START_ID` | `2000` | Starting VMID for workspace VMs (increments until a free ID is found) |
 | `VM_MEMORY` | `4096` | VM memory in MB |
 | `VM_CORES` | `2` | Number of vCPU cores |
-| `VM_DISK_SIZE` | `50` | VM disk size in GB |
+|| `VM_DISK_SIZE` | `50` | Workspace VM root disk size in GB. The template is pre-sized at template creation (see `--template-disk-size` in setup.sh); this clamps the cloned VM to this size before install. |
 
 ## Usage
 
@@ -159,7 +159,7 @@ New workspace VMs are named `devsy-{machine-id}` and tagged `devsy` in Proxmox. 
 1. `devsy up` calls the provider's `create` command
 2. The provider clones the cloud-init template to a new VM
 3. Cloud-init is applied: SSH key, DHCP network, `devsy` user
-4. If `VM_DISK_SIZE` exceeds the template disk, the disk is resized
+4. The clone is resized to `VM_DISK_SIZE` **before** the VM starts, so the workspace install (git clone / docker pull) always has the requested capacity
 5. The VM is started; the provider polls until the QEMU guest agent reports an IP
 6. Devsy connects via SSH, installs its agent, and launches the devcontainer
 7. Your IDE connects to the workspace over SSH
