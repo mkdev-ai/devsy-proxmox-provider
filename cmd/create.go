@@ -245,13 +245,11 @@ func ensureSSHKeypair(privPath, pubPath string) error {
 // bounded, actionable timeout so a slow-but-healthy guest is never treated
 // as a hard failure.
 func waitWorkspaceIP(ctx context.Context, client proxmox.Client, node string, vmid int) (string, error) {
-	// The agent-readiness probe has its own bounded timeout.
-	if err := proxmox.WaitForAgent(ctx, client, node, vmid, 30*time.Second); err != nil {
-		return "", err
-	}
-
 	// Bounded, actionable IP wait. The timeout is a documented, bounded
 	// default; the error names the waited duration and the condition.
+	// WaitForIP internally probes the guest agent with a 5-minute bounded
+	// timeout before polling for the IP, so there is no need for a separate
+	// agent-readiness probe here.
 	const ipWait = 10 * time.Minute
 	ip, err := proxmox.WaitForIP(ctx, client, node, vmid, ipWait)
 	if err != nil {
