@@ -38,7 +38,10 @@ func WaitForAgent(ctx context.Context, client Client, node string, vmid int, tim
 // first non-loopback IPv4 address, or an actionable error after the bounded
 // timeout.
 func WaitForIP(ctx context.Context, client Client, node string, vmid int, timeout time.Duration) (string, error) {
-	if err := WaitForAgent(ctx, client, node, vmid, 30*time.Second); err != nil {
+	// On a cold boot the guest agent can take several minutes to become
+	// available. Use a generous bounded timeout so a slow-but-healthy VM
+	// is never mistaken for a hard failure.
+	if err := WaitForAgent(ctx, client, node, vmid, 5*time.Minute); err != nil {
 		return "", fmt.Errorf("guest agent not ready: %w", err)
 	}
 
