@@ -8,7 +8,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
-	"net"
+	"os/exec"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,10 +252,11 @@ func ensureSSHKeypair(privPath, pubPath string) error {
 }
 
 
-// waitForSSHReady probes the VM's SSH port until it accepts a connection.
-// It uses the provided private key to attempt an SSH handshake, which proves
-// the SSH daemon is running AND the "devsy" user + key are configured.
-// Returns nil once SSH is ready, or an error if it times out.
+// waitForSSHReady verifies that the VM is actually reachable via SSH
+// authentication (not just that port 22 is open). It attempts a real SSH
+// connection using the provided private key and runs "echo ok" to confirm
+// the "devsy" user and key are configured by cloud-init. Returns nil once
+// SSH authentication succeeds, or an error if it times out.
 func waitForSSHReady(ctx context.Context, ip, keyPath string, timeout time.Duration) error {
 	deadline := time.After(timeout)
 	ticker := time.NewTicker(5 * time.Second)
@@ -268,12 +269,21 @@ func waitForSSHReady(ctx context.Context, ip, keyPath string, timeout time.Durat
 		case <-deadline:
 			return fmt.Errorf("SSH not ready after %v", timeout)
 		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", ip+":22", 5*time.Second)
-			if err != nil {
-				continue
+			cmd := exec.CommandContext(ctx, "ssh",
+				"-T",
+				"-i", keyPath,
+				"-o", "IdentitiesOnly=yes",
+				"-o", "StrictHostKeyChecking=no",
+				"-o", "UserKnownHostsFile=/dev/null",
+				"-o", "LogLevel=ERROR",
+				"-o", "ConnectTimeout=5",
+				"devsy@"+ip,
+				"echo ok",
+			)
+			out, err := cmd.Output()
+			if err == nil && strings.TrimSpace(string(out)) == "ok" {
+				return nil
 			}
-			conn.Close()
-			return nil
 		}
 	}
 }
