@@ -106,14 +106,23 @@ The setup workflow SHALL retain a separate script that an administrator runs as 
 - **WHEN** an administrator reruns the setup script for resources it has already prepared
 - **THEN** the script recognizes the existing resources and completes without creating duplicate accounts, tokens, or templates
 
-### Requirement: Use pre-existing network and storage resources
+### Requirement: Template disk sizing
+The setup workflow SHALL create the cloud-init template with a configurable
+root disk size so the template base is not artificially small. The provider
+SHALL resize the cloned workspace VM to `VM_DISK_SIZE` immediately after
+cloning and **before** the VM starts, so the workspace install (git clone /
+docker pull) always has the requested capacity even if the template base
+was small.
 
-The Proxmox setup script SHALL use the configured existing network bridge and storage pool and SHALL NOT create or reconfigure those host resources.
+#### Scenario: Template created at the desired size
+- **WHEN** an administrator runs `scripts/setup.sh --template-disk-size
+  <size-mib>`
+- **THEN** the template's root disk (virtio0) is created at that exact
+  capacity, not the Ubuntu cloud image default of ~3.5 GB.
 
-#### Scenario: Create a template using configured resources
-- **WHEN** the administrator selects an existing bridge and storage pool for the setup script
-- **THEN** the cloud-init template is attached to that bridge and its disk is created on that storage pool
-
-#### Scenario: A selected bridge or storage pool is unavailable
-- **WHEN** the selected bridge or storage pool does not exist or cannot be used
-- **THEN** setup fails with an actionable error and leaves host network and storage configuration unchanged
+#### Scenario: Workspace VM sized before install
+- **WHEN** a workspace is created with `VM_DISK_SIZE` greater than the
+  template base
+- **THEN** the provider resizes the clone to exactly `VM_DISK_SIZE` before
+  starting the VM, and the git clone and Docker pull that follow see
+  adequate disk space.
