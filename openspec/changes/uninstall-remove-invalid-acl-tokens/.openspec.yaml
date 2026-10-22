@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-22
+goal: Remove token ACLs before the token, tolerate partial pre-existing cleanup,
+  and guarantee the user entry no longer references the token when uninstall
+  finishes
