@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-22
+description: Verify the just-created VM responds to qemu status + guest-agent before the IP wait (kills 10+ min reachability gap)
+
