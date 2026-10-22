@@ -67,7 +67,6 @@ options:
     description: "Proxmox OS type for the VM"
     default: "l26"
 agent:
-  path: ${DEVSY}
   # Do not pin dataPath: Devsy's own default absolute state root applies.
   # Override per-user with DEVSY_HOME (or --home) instead of hardcoding a
   # guest-users home path the provider cannot know. Devsy rejects a literal ~,
