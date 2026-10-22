@@ -106,9 +106,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Step 6: Wait for VM to become reachable before the IP wait.
 	// StartVM+WaitForTask only prove the hypervisor accepted the start
 	// request; the provider must verify the VM responded to a status/config
-	// read before reporting success to Devsy. Poll qemu status + guest
-	// agent for ~90s; on a cold boot the agent can be up but no IP is
-	// leased yet, so this short pre-flight keeps the total latency low.
+	// read before reporting success to Devsy. Poll qemu status (the
+	// authoritative signal that the hypervisor has finished creating/start
+	// ing the VM) for ~90s; a cold-booted VM can take well over 90s for the
+	// guest agent to answer, so this gate tolerates a slow-but-healthy
+	// agent. The guest agent itself is still probed in the IP-wait step
+	// (WaitForIP), which retries with a bounded timeout, so IP discovery
+	// never silently hangs.
 	if err := proxmox.WaitForVMReady(ctx, client, opts.Node, vmid, 90*time.Second); err != nil {
 		return fmt.Errorf("verifying VM readiness: %w", err)
 	}
