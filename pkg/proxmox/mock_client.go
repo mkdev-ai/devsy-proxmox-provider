@@ -32,6 +32,15 @@ type MockClient struct {
 	VMStatusErr    error
 	Ifaces         []NetworkInterface
 	IfacesErr      error
+
+	// IfacesTiers holds a sequence of network-interface responses. Each tier is
+	// returned on successive GetNetworkInterfaces calls (index = call count - 1).
+	// The last tier is repeated when calls exceed the number of tiers. When nil,
+	// the static Ifaces (plus IfacesErr) is used. This lets callers simulate a
+	// slow-but-healthy guest whose agent is alive but whose IP appears only
+	// after a delay: e.g. [][]NetworkInterface{{loopbackOnly}, {realIP}}.
+	IfacesTiers [][]NetworkInterface
+
 	WaitForTaskErr error
 
 	Calls []MockCall
@@ -102,6 +111,15 @@ func (m *MockClient) GetVMStatus(ctx context.Context, node string, vmid int) (*V
 
 func (m *MockClient) GetNetworkInterfaces(ctx context.Context, node string, vmid int) ([]NetworkInterface, error) {
 	m.record("GetNetworkInterfaces", node, vmid)
+	if m.IfacesTiers != nil {
+		idx := len(m.Calls) - 1
+		if idx >= len(m.IfacesTiers) {
+			idx = len(m.IfacesTiers) - 1
+		}
+		if len(m.IfacesTiers[idx]) > 0 {
+			return m.IfacesTiers[idx], nil
+		}
+	}
 	return m.Ifaces, m.IfacesErr
 }
 

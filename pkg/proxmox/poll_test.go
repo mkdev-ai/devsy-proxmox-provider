@@ -87,6 +87,45 @@ func TestWaitForIP_RetriesOnError(t *testing.T) {
 	_ = mock
 }
 
+// TestWaitForIP_SlowButHealthyVM verifies that a guest whose agent is alive but
+// only reports a loopback IP on the first probe (and the real IP only after a
+// delay) is allowed to return the real IP: the agent-readiness probe passes,
+// then the IP poll retries until the interface tier supplies the address.
+func TestWaitForIP_SlowButHealthyVM(t *testing.T) {
+	loopbackOnly := []proxmox.NetworkInterface{
+		{
+			Name: "lo",
+			IPAddresses: []proxmox.IPAddr{
+				{IPAddress: "127.0.0.1", Type: "ipv4", Prefix: 8},
+			},
+		},
+	}
+	withRealIP := []proxmox.NetworkInterface{
+		{
+			Name: "eth0",
+			IPAddresses: []proxmox.IPAddr{
+				{IPAddress: "10.0.0.5", Type: "ipv4", Prefix: 24},
+			},
+		},
+	}
+
+	mock := &proxmox.MockClient{
+		IfacesTiers: [][]proxmox.NetworkInterface{loopbackOnly, withRealIP},
+	}
+
+	ip, err := proxmox.WaitForIP(context.Background(), mock, "pve1", 101, 5*time.Second)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ip != "10.0.0.5" {
+		t.Errorf("expected IP 10.0.0.5, got %q", ip)
+	}
+	// The IP poll must have probed twice: once for loopback-only, once for the real IP.
+	if mock.CallCount("GetNetworkInterfaces") != 2 {
+		t.Errorf("expected 2 GetNetworkInterfaces calls, got %d", mock.CallCount("GetNetworkInterfaces"))
+	}
+}
+
 func TestWaitForIP_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // Cancel immediately
