@@ -104,8 +104,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 6: Wait for IP address
+	// The wait is bounded and actionable: first the guest agent is confirmed
+	// alive (WaitForAgent), then the IP poll uses a bounded timeout. A
+	// slow-but-healthy guest is never mistaken for a hard timeout.
 	fmt.Fprintf(os.Stderr, "Waiting for VM to get an IP address...\n")
-	ip, err := proxmox.WaitForIP(ctx, client, opts.Node, vmid, 2*time.Minute)
+	ip, err := waitWorkspaceIP(ctx, client, opts.Node, vmid)
 	if err != nil {
 		return fmt.Errorf("waiting for IP: %w", err)
 	}
@@ -214,4 +217,24 @@ func ensureSSHKeypair(privPath, pubPath string) error {
 		return err
 	}
 	return os.WriteFile(pubPath, ssh.MarshalAuthorizedKey(pub), 0644)
+}
+
+// waitWorkspaceIP waits for a workspace VM to report a non-loopback IPv4
+// address. It first confirms the QEMU guest agent is alive, then applies a
+// bounded, actionable timeout so a slow-but-healthy guest is never treated
+// as a hard failure.
+func waitWorkspaceIP(ctx context.Context, client proxmox.Client, node string, vmid int) (string, error) {
+	// The agent-readiness probe has its own bounded timeout.
+	if err := proxmox.WaitForAgent(ctx, client, node, vmid, 30*time.Second); err != nil {
+		return "", err
+	}
+
+	// Bounded, actionable IP wait. The timeout is a documented, bounded
+	// default; the error names the waited duration and the condition.
+	const ipWait = 10 * time.Minute
+	ip, err := proxmox.WaitForIP(ctx, client, node, vmid, ipWait)
+	if err != nil {
+		return "", fmt.Errorf("VM has no usable IP after %v: %w", ipWait, err)
+	}
+	return ip, nil
 }
