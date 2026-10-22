@@ -30,18 +30,25 @@ func init() {
 
 func runCreate(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	opts := options.FromEnv()
-	if err := opts.Validate(); err != nil {
+	oopts := options.FromEnv()
+	if err := oopts.Validate(); err != nil {
 		return err
 	}
-	if opts.MachineID == "" {
+	if oopts.MachineID == "" {
 		return fmt.Errorf("MACHINE_ID not set")
 	}
-	if opts.MachineFolder == "" {
+	if oopts.MachineFolder == "" {
 		return fmt.Errorf("MACHINE_FOLDER not set")
 	}
 
-	client := newProxmoxClient(opts)
+	// The create flow (VM readiness check + IP wait) can take several minutes
+	// and must not be truncated by the command context, which Devsy may cancel
+	// after a short client-side timeout. Use a detached context so the whole
+	// create flow runs to completion before reporting the result.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := newProxmoxClient(oopts)
 
 	// Step 1: Ensure SSH keypair exists in the machine folder, generating it if needed
 	privKeyPath := fmt.Sprintf("%s/id_ed25519", opts.MachineFolder)
