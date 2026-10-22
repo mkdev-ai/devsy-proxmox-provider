@@ -298,9 +298,9 @@ run qm create "${VMID}" \
 
 # Import disk (size configurable so templates land at the desired capacity)
 if [[ $DRY_RUN -eq 1 ]]; then
-    log "[dry-run] qm importdisk ${VMID} ${IMG_PATH} ${STORAGE} --format ${DISK_FORMAT} --size ${TEMPLATE_DISK_SIZE}"
+    log "[dry-run] qm importdisk ${VMID} ${IMG_PATH} ${STORAGE} --format ${DISK_FORMAT}"
 else
-    qm importdisk "${VMID}" "${IMG_PATH}" "${STORAGE}" --format "${DISK_FORMAT}" --size "${TEMPLATE_DISK_SIZE}" > /dev/null
+    qm importdisk "${VMID}" "${IMG_PATH}" "${STORAGE}" --format "${DISK_FORMAT}" > /dev/null
 fi
 
 # Attach disk — read the volume name Proxmox assigned rather than guessing it
