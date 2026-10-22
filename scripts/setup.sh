@@ -231,16 +231,35 @@ else
     die "Snippets are not enabled on existing local storage. Enable them in Proxmox first; setup does not reconfigure storage."
 fi
 
-# Write vendor cloud-init config (installs qemu-guest-agent on first boot)
+# Write vendor cloud-init config (installs qemu-guest-agent AND pre-installs
+# the Devsy agent so workspace creation is fast)
 if [[ $DRY_RUN -eq 1 ]]; then
     log "[dry-run] Would write ${VENDOR_YAML}"
 else
-    cat > "${VENDOR_YAML}" <<'EOF'
+cat > "${VENDOR_YAML}" <<'EOF'
 #cloud-config
+package_update: true
+packages:
+    - qemu-guest-agent
 runcmd:
-    - apt-get update -qq
-    - apt-get install -y -qq qemu-guest-agent
+    # Install qemu-guest-agent
     - systemctl enable --now qemu-guest-agent
+
+    # Pre-install the Devsy agent binary so workspace creation is fast
+    # (skips the ~10 min download+install during create)
+    - |
+        set -e
+        DEVSY_VERSION="v1.24.0"
+        DEVSY_URL="https://github.com/devsy-org/devsy/releases/download/v1.24.0/devsy-linux-amd64"
+        DEVSY_PATH="/usr/local/bin/devsy"
+        if [ ! -x "$DEVSY_PATH" ]; then
+            echo "Downloading Devsy agent v1.24.0..."
+            curl -fsSL "$DEVSY_URL" -o "$DEVSY_PATH"
+            chmod +x "$DEVSY_PATH"
+            echo "Devsy agent installed to $DEVSY_PATH"
+        else
+            echo "Devsy agent already installed at $DEVSY_PATH"
+        fi
 EOF
     log "Written ${VENDOR_YAML}"
 fi
@@ -265,11 +284,11 @@ else
     log "Checksum OK"
 fi
 
-# Create VM
+# Create VM (4 cores / 4GB to speed up cloud-init and agent install)
 run qm create "${VMID}" \
     --name "${TEMPLATE_NAME}" \
-    --memory 2048 \
-    --cores 2 \
+    --memory 4096 \
+    --cores 4 \
     --ostype l26 \
     --net0 "virtio,bridge=${BRIDGE}" \
     --agent 1 \
