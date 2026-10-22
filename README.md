@@ -75,6 +75,9 @@ sudo bash scripts/setup.sh --node pve --storage local-lvm
 
 # Or pipe over SSH with direct input (no SSH connection line)
 | bash -s -- --node pve --storage local-lvm < scripts/setup.sh
+
+# Or fully remote — fetch and run directly, no clone needed
+curl -fsSL https://raw.githubusercontent.com/mkdev-ai/devsy-proxmox-provider/main/scripts/setup.sh | bash -s -- --node pve --storage local-lvm
 ```
 
 ### What it does
@@ -106,6 +109,9 @@ To remove Devsy-named resources managed by setup (VMs, template, service account
 ```bash
 # Pipe over SSH with direct input (no SSH connection line)
 | bash -s -- < scripts/uninstall.sh
+
+# Or fully remote — fetch and run directly, no clone needed
+curl -fsSL https://raw.githubusercontent.com/mkdev-ai/devsy-proxmox-provider/main/scripts/uninstall.sh | bash
 ```
 
 Uninstall targets only `devsy-*` VMs/snippets and the `devsy@pve` account/token. Legacy DevPod-created VMs and credentials are unsupported, are not adopted, and are never removed by this script.
