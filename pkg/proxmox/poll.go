@@ -79,11 +79,17 @@ func findNonLoopbackIPv4(interfaces []NetworkInterface) string {
 	return ""
 }
 
-// WaitForVMReady polls the qemu status endpoint and the guest agent until both
-// respond, confirming the newly started VM is reachable before the IP wait
-// begins. Each tick requires BOTH reads to succeed; any single read error
-// restarts the tick. Returns nil once both have cleared in one tick, or an
-// error if the timeout (approx 90s) is exceeded.
+// WaitForVMReady polls the qemu status endpoint until the VM reports
+// "running", confirming the newly started VM is reachable before the IP wait
+// begins. The qemu status read is the authoritative signal that the hypervisor
+// has finished creating/starting the VM: a freshly cloned cold-booted VM can
+// take well over 90s for the guest agent to answer, so this gate tolerates a
+// slow-but-healthy agent and returns as soon as the VM is running. The guest
+// agent itself is still probed separately by WaitForIP (Step 7), which retries
+// and uses a bounded timeout, so IP discovery never silently hangs either.
+//
+// Returns nil once the VM reports running, or an error if the VM does not
+// reach running within the timeout.
 func WaitForVMReady(ctx context.Context, client Client, node string, vmid int, timeout time.Duration) error {
 	deadline := time.After(timeout)
 	ticker := time.NewTicker(1 * time.Second)
@@ -94,23 +100,18 @@ func WaitForVMReady(ctx context.Context, client Client, node string, vmid int, t
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-deadline:
-			return fmt.Errorf("timed out waiting for VM readiness after %v (qemu status + guest agent)", timeout)
+			return fmt.Errorf("timed out waiting for VM readiness after %v (qemu status)", timeout)
 		case <-ticker.C:
 			status, err := client.GetVMStatus(ctx, node, vmid)
 			if err != nil {
 				continue
 			}
-			// A ready VM should report a running qemu status; still require BOTH
-			// reads to succeed in the same tick.
-			if status == nil || status.Status != "running" {
-				continue
+			// The VM is considered created once the hypervisor reports "running".
+			// Do not wait for the guest agent here — start/stop of the agent is a
+			// separate concern handled by WaitForIP below.
+			if status != nil && status.Status == "running" {
+				return nil
 			}
-			if _, err := client.GetNetworkInterfaces(ctx, node, vmid); err != nil {
-				continue
-			}
-			// Both responded: the VM is reachable (guest agent answered and the
-			// status is running). Return so the create flow can proceed to WaitForIP.
-			return nil
 		}
 	}
 }
