@@ -75,6 +75,8 @@ jobs:
             gh release upload "$TAG" \
               dist/proxmox-provider-linux-amd64 \
               dist/proxmox-provider-linux-arm64 \
+              dist/proxmox-provider-windows-amd64 \
+              dist/proxmox-provider-windows-arm64 \
               dist/proxmox-provider-darwin-amd64 \
               dist/proxmox-provider-darwin-arm64 \
               provider.yaml \
@@ -85,6 +87,8 @@ jobs:
               --generate-notes \
               dist/proxmox-provider-linux-amd64 \
               dist/proxmox-provider-linux-arm64 \
+              dist/proxmox-provider-windows-amd64 \
+              dist/proxmox-provider-windows-arm64 \
               dist/proxmox-provider-darwin-amd64 \
               dist/proxmox-provider-darwin-arm64 \
               provider.yaml
