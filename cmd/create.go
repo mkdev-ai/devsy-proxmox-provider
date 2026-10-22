@@ -8,7 +8,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
+	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -134,6 +136,15 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("waiting for IP: %w", err)
 	}
 
+	// Step 7a: Wait for SSH to become available before reporting success.
+	// On a cold boot, cloud-init can take several minutes to complete and
+	// start the SSH daemon. Devsy needs SSH to be ready before it can
+	// install the agent, so we probe the port with a bounded timeout.
+	fmt.Fprintf(os.Stderr, "Waiting for SSH to become available...\n")
+	if err := waitForSSHReady(ctx, ip, filepath.Join(opts.MachineFolder, "id_ed25519"), 5*time.Minute); err != nil {
+		return fmt.Errorf("waiting for SSH readiness: %w", err)
+	}
+
 	// Step 7: Output JSON with connection info
 	result := map[string]string{
 		"ipAddress": ip,
@@ -238,6 +249,33 @@ func ensureSSHKeypair(privPath, pubPath string) error {
 		return err
 	}
 	return os.WriteFile(pubPath, ssh.MarshalAuthorizedKey(pub), 0644)
+}
+
+
+// waitForSSHReady probes the VM's SSH port until it accepts a connection.
+// It uses the provided private key to attempt an SSH handshake, which proves
+// the SSH daemon is running AND the "devsy" user + key are configured.
+// Returns nil once SSH is ready, or an error if it times out.
+func waitForSSHReady(ctx context.Context, ip, keyPath string, timeout time.Duration) error {
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline:
+			return fmt.Errorf("SSH not ready after %v", timeout)
+		case <-ticker.C:
+			conn, err := net.DialTimeout("tcp", ip+":22", 5*time.Second)
+			if err != nil {
+				continue
+			}
+			conn.Close()
+			return nil
+		}
+	}
 }
 
 // waitWorkspaceIP waits for a workspace VM to report a non-loopback IPv4
