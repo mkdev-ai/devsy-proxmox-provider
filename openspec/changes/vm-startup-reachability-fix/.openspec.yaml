@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-10-22
+goal: Verify VM readiness on cold boot — gate on qemu status == running, not the slow guest agent
