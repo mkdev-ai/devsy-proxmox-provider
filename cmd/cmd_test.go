@@ -291,6 +291,9 @@ func TestCreate_DevsyResultAndEnvironmentContract(t *testing.T) {
 		Resources: []proxmox.Resource{
 			{Type: "qemu", VMID: 9000, Name: "devsy-template", Node: "pve1", Template: 1},
 		},
+		// New readiness gate: a just-started VM must respond to qemu status
+		// AND the guest agent before the IP wait begins.
+		VMStatus: &proxmox.VMStatus{Status: "running"},
 		Ifaces: []proxmox.NetworkInterface{{
 			Name:        "eth0",
 			IPAddresses: []proxmox.IPAddr{{IPAddress: "192.0.2.10", Type: "ipv4"}},
@@ -312,6 +315,11 @@ func TestCreate_DevsyResultAndEnvironmentContract(t *testing.T) {
 	}
 	if got := mockCall(t, mock, "CloneVM").Args[2].(proxmox.CloneRequest).Name; got != "devsy-machine-1" {
 		t.Errorf("VM name = %q, want devsy-machine-1", got)
+	}
+	// The new readiness gate polls GetVMStatus + GetNetworkInterfaces before
+	// the IP wait, so both must be recorded by the time the test passes.
+	if !mock.HasCall("GetVMStatus") || !mock.HasCall("GetNetworkInterfaces") {
+		t.Fatalf("expected GetVMStatus and GetNetworkInterfaces calls, got %+v", mock.Calls)
 	}
 }
 

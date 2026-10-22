@@ -101,7 +101,17 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("waiting for VM start: %w", err)
 	}
 
-	// Step 6: Wait for IP address
+	// Step 6: Wait for VM to become reachable before the IP wait.
+	// StartVM+WaitForTask only prove the hypervisor accepted the start
+	// request; the provider must verify the VM responded to a status/config
+	// read before reporting success to Devsy. Poll qemu status + guest
+	// agent for ~90s; on a cold boot the agent can be up but no IP is
+	// leased yet, so this short pre-flight keeps the total latency low.
+	if err := proxmox.WaitForVMReady(ctx, client, opts.Node, vmid, 90*time.Second); err != nil {
+		return fmt.Errorf("verifying VM readiness: %w", err)
+	}
+
+	// Step 7: Wait for IP address
 	fmt.Fprintf(os.Stderr, "Waiting for VM to get an IP address...\n")
 	ip, err := proxmox.WaitForIP(ctx, client, opts.Node, vmid, 2*time.Minute)
 	if err != nil {
